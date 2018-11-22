@@ -23,6 +23,7 @@ protected:
   bool _is_initialized() const;
   bool _create_sender(const String &name);
   void _release_sender();
+  void _update_sender();
   void _send_texture();
 
 private:

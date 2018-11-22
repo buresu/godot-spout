@@ -74,6 +74,32 @@ void SpoutViewport::_release_sender() {
   }
 }
 
+void SpoutViewport::_update_sender() {
+
+  unsigned int width, height;
+  char channel[256] = {};
+
+  // Check initialized
+  if (!_is_initialized()) {
+    return;
+  }
+
+  // Check channel name
+  CharString channel_name = _channel_name.utf8();
+  if (channel_name.length() > 0) {
+    strcpy_s(channel, channel_name.length(), channel_name.get_data());
+  } else {
+    return;
+  }
+
+  // Sender size
+  width = static_cast<unsigned int>(get_size().width);
+  height = static_cast<unsigned int>(get_size().height);
+
+  // Update sender
+  _sender->UpdateSender(channel, width, height);
+}
+
 void SpoutViewport::_send_texture() {
 
   VisualServer *vs = VisualServer::get_singleton();
