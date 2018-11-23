@@ -22,8 +22,8 @@ godot_gdnative_terminate(godot_gdnative_terminate_options *o) {
 // NativeScript Initialize
 extern "C" void GDN_EXPORT godot_nativescript_init(void *handle) {
   Godot::nativescript_init(handle);
-  register_class<SpoutTexture>();
-  register_class<SpoutViewport>();
+  register_tool_class<SpoutTexture>();
+  register_tool_class<SpoutViewport>();
 }
 
 // NativeScript Terminate

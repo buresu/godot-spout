@@ -17,7 +17,7 @@ public:
   virtual ~SpoutViewport();
 
   String get_channel_name() const;
-  void set_channel_name(const String &name);
+  void set_channel_name(String name);
 
 protected:
   bool _is_initialized() const;

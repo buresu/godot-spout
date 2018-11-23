@@ -8,30 +8,40 @@ using namespace godot;
 
 void SpoutViewport::_init() {
 
+  // Connect
+  connect("size_changed", this, "_update_sender");
   VisualServer::get_singleton()->connect("frame_post_draw", this,
                                          "_send_texture");
 }
 
 void SpoutViewport::_register_methods() {
 
+  // Register method
+  register_method("_update_sender", &SpoutViewport::_update_sender);
   register_method("_send_texture", &SpoutViewport::_send_texture);
 
+  // Register property
   register_property<SpoutViewport, String>(
-      "channel_name", &SpoutViewport::_channel_name, String(""));
+      "channel_name", &SpoutViewport::set_channel_name,
+      &SpoutViewport::get_channel_name, String(""));
 }
 
 SpoutViewport::SpoutViewport() : Viewport() {}
 
 SpoutViewport::~SpoutViewport() {
+
+  // Disconnect
+  disconnect("size_changed", this, "_update_sender");
+  VisualServer::get_singleton()->disconnect("frame_post_draw", this,
+                                            "_send_texture");
+
   // Release sender
   _release_sender();
 }
 
 String SpoutViewport::get_channel_name() const { return _channel_name; }
 
-void SpoutViewport::set_channel_name(const String &name) {
-  _channel_name = name;
-}
+void SpoutViewport::set_channel_name(String name) { _channel_name = name; }
 
 bool SpoutViewport::_is_initialized() const { return _sender != nullptr; }
 
@@ -81,7 +91,9 @@ void SpoutViewport::_update_sender() {
 
   // Check initialized
   if (!_is_initialized()) {
-    return;
+    if (!_create_sender(_channel_name)) {
+      return;
+    }
   }
 
   // Check channel name
