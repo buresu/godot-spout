@@ -3,5 +3,5 @@
 [ext_resource path="res://addons/SpoutPlugin/SpoutPlugin.gdnlib" type="GDNativeLibrary" id=1]
 
 [resource]
-class_name = "SpoutViewport"
+class_name = "GDSpoutSender"
 library = ExtResource(1)

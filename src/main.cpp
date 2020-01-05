@@ -1,7 +1,7 @@
 #include <Godot.hpp>
 
 #include "SpoutTexture.hpp"
-#include "SpoutViewport.hpp"
+#include "GDSpoutSender.hpp"
 
 using namespace godot;
 
@@ -23,7 +23,7 @@ godot_gdnative_terminate(godot_gdnative_terminate_options *o) {
 extern "C" void GDN_EXPORT godot_nativescript_init(void *handle) {
   Godot::nativescript_init(handle);
   register_tool_class<SpoutTexture>();
-  register_tool_class<SpoutViewport>();
+  register_class<GDSpoutSender>();
 }
 
 // NativeScript Terminate
