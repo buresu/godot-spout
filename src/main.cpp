@@ -1,7 +1,7 @@
 #include <Godot.hpp>
 
-#include "SpoutTexture.hpp"
 #include "GDSpoutSender.hpp"
+#include "SpoutTexture.hpp"
 
 using namespace godot;
 

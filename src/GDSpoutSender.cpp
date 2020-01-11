@@ -23,10 +23,10 @@ void GDSpoutSender::_register_methods() {
       &GDSpoutSender::get_channel_name, String(""));
 
   register_property<GDSpoutSender, Ref<Texture>>(
-    "texture", &GDSpoutSender::set_texture,
-    &GDSpoutSender::get_texture, Ref<Texture>(),
-    GODOT_METHOD_RPC_MODE_DISABLED, GODOT_PROPERTY_USAGE_DEFAULT,
-    GODOT_PROPERTY_HINT_RESOURCE_TYPE, String("Texture"));
+      "texture", &GDSpoutSender::set_texture, &GDSpoutSender::get_texture,
+      Ref<Texture>(), GODOT_METHOD_RPC_MODE_DISABLED,
+      GODOT_PROPERTY_USAGE_DEFAULT, GODOT_PROPERTY_HINT_RESOURCE_TYPE,
+      String("Texture"));
 }
 
 GDSpoutSender::GDSpoutSender() : Node() {}
@@ -56,6 +56,7 @@ void GDSpoutSender::set_texture(Ref<Texture> texture) {
 }
 
 bool GDSpoutSender::_make_current() {
+  // Make current context
   HDC hdc = wglGetCurrentDC();
   HGLRC hglrc = wglGetCurrentContext();
   return wglMakeCurrent(hdc, hglrc);
@@ -93,15 +94,17 @@ bool GDSpoutSender::_create_sender(const String &name) {
   }
 
   // Create sender
+  _sender = new SpoutSender();
+
   if (_make_current()) {
-    _sender = new SpoutSender();
-    if (!_sender->CreateSender(channel, width, height)) {
-      _release_sender();
-      return false;
+    if (_sender->CreateSender(channel, width, height)) {
+      return true;
     }
   }
 
-  return true;
+  _release_sender();
+
+  return false;
 }
 
 void GDSpoutSender::_release_sender() {
@@ -165,9 +168,8 @@ void GDSpoutSender::_send_texture() {
     return;
   }
 
-  VisualServer *vs = VisualServer::get_singleton();
-
   // Get texture id
+  VisualServer *vs = VisualServer::get_singleton();
   GLint tex_id = GLint(vs->texture_get_texid(_texture->get_rid()));
 
   // Get texture size

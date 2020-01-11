@@ -64,7 +64,8 @@ bool SpoutTexture::_create_receiver(const String &name) {
   }
 
   // Allocate texture
-  vs->texture_allocate(_texture, width, height, 0, Image::FORMAT_RGBA8, VisualServer::TEXTURE_TYPE_2D);
+  vs->texture_allocate(_texture, width, height, 0, Image::FORMAT_RGBA8,
+                       VisualServer::TEXTURE_TYPE_2D);
 
   return true;
 }
