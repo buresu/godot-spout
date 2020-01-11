@@ -1,4 +1,4 @@
-#include "SpoutTexture.hpp"
+#include "GDSpoutTexture.hpp"
 #include <SpoutReceiver.h>
 #include <VisualServer.hpp>
 
@@ -6,7 +6,7 @@
 
 using namespace godot;
 
-void SpoutTexture::_init() {
+void GDSpoutTexture::_init() {
   // Set pre draw callback
   VisualServer::get_singleton()->connect("frame_pre_draw", this,
                                          "_receive_texture");
@@ -15,17 +15,17 @@ void SpoutTexture::_init() {
   // true);
 }
 
-void SpoutTexture::_register_methods() {
+void GDSpoutTexture::_register_methods() {
   // Register method
   register_method("_receive_texture", &SpoutTexture::_receive_texture);
 }
 
-SpoutTexture::SpoutTexture() : Texture() {
+GDSpoutTexture::GDSpoutTexture() : Texture() {
   // Create texture
   _texture = VisualServer::get_singleton()->texture_create();
 }
 
-SpoutTexture::~SpoutTexture() {
+GDSpoutTexture::~GDSpoutTexture() {
   // Release receiver
   _release_receiver();
 
@@ -33,9 +33,9 @@ SpoutTexture::~SpoutTexture() {
   VisualServer::get_singleton()->free_rid(_texture);
 }
 
-bool SpoutTexture::_is_initialized() const { return _receiver != nullptr; }
+bool GDSpoutTexture::_is_initialized() const { return _receiver != nullptr; }
 
-bool SpoutTexture::_create_receiver(const String &name) {
+bool GDSpoutTexture::_create_receiver(const String &name) {
 
   RID _texture = get_rid();
 
@@ -70,7 +70,7 @@ bool SpoutTexture::_create_receiver(const String &name) {
   return true;
 }
 
-void SpoutTexture::_release_receiver() {
+void GDSpoutTexture::_release_receiver() {
   if (_is_initialized()) {
     _receiver->ReleaseReceiver();
     delete _receiver;
@@ -78,7 +78,7 @@ void SpoutTexture::_release_receiver() {
   }
 }
 
-void SpoutTexture::_receive_texture() {
+void GDSpoutTexture::_receive_texture() {
 
   RID _texture = get_rid();
 

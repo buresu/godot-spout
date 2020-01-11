@@ -7,7 +7,7 @@ class SpoutReceiver;
 
 namespace godot {
 
-class SpoutTexture : public Texture {
+class GDSpoutTexture : public Texture {
   GODOT_CLASS(SpoutTexture, Texture)
 public:
   void _init();

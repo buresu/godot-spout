@@ -74,7 +74,7 @@ bool GDSpoutSender::_create_sender(const String &name) {
   unsigned int width, height;
   char channel[256] = {};
 
-  // Release receiver
+  // Release sender
   _release_sender();
 
   // Check channel name
