@@ -1,7 +1,7 @@
 #include "GDSpoutSender.hpp"
 
-#include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
+#include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/godot.hpp>
 
 #include <SpoutSender.h>
@@ -12,27 +12,37 @@ using namespace godot;
 void GDSpoutSender::_bind_methods() {
 
   // Bind methods
-  ClassDB::bind_method(D_METHOD("_send_texture"), &GDSpoutSender::_send_texture);
-  ClassDB::bind_method(D_METHOD("get_channel_name"), &GDSpoutSender::get_channel_name);
-  ClassDB::bind_method(D_METHOD("set_channel_name", "name"), &GDSpoutSender::set_channel_name);
+  ClassDB::bind_method(D_METHOD("_send_texture"),
+                       &GDSpoutSender::_send_texture);
+  ClassDB::bind_method(D_METHOD("get_channel_name"),
+                       &GDSpoutSender::get_channel_name);
+  ClassDB::bind_method(D_METHOD("set_channel_name", "name"),
+                       &GDSpoutSender::set_channel_name);
   ClassDB::bind_method(D_METHOD("get_texture"), &GDSpoutSender::get_texture);
-  ClassDB::bind_method(D_METHOD("set_texture", "p_texture"), &GDSpoutSender::set_texture);
+  ClassDB::bind_method(D_METHOD("set_texture", "p_texture"),
+                       &GDSpoutSender::set_texture);
 
   // Add properties
-  ClassDB::add_property("GDSpoutSender", PropertyInfo(Variant::STRING, "channel_name"), "set_channel_name", "get_channel_name");
-  ClassDB::add_property("GDSpoutSender", PropertyInfo(Variant::OBJECT, "texture"), "set_texture", "get_texture");
+  ClassDB::add_property("GDSpoutSender",
+                        PropertyInfo(Variant::STRING, "channel_name"),
+                        "set_channel_name", "get_channel_name");
+  ClassDB::add_property("GDSpoutSender",
+                        PropertyInfo(Variant::OBJECT, "texture"), "set_texture",
+                        "get_texture");
 }
 
 GDSpoutSender::GDSpoutSender() : Node() {
 
   // Connect
-  RenderingServer::get_singleton()->connect("frame_post_draw", {this, "_send_texture"});
+  RenderingServer::get_singleton()->connect("frame_post_draw",
+                                            {this, "_send_texture"});
 }
 
 GDSpoutSender::~GDSpoutSender() {
 
   // Disconnect
-  RenderingServer::get_singleton()->disconnect("frame_post_draw", {this, "_send_texture"});
+  RenderingServer::get_singleton()->disconnect("frame_post_draw",
+                                               {this, "_send_texture"});
 
   // Release sender
   _release_sender();
@@ -89,7 +99,7 @@ bool GDSpoutSender::_create_sender(const String &name) {
   // Check channel name
   CharString channel_name = name.utf8();
   if (channel_name.length() > 0) {
-    strcpy(channel, channel_name.get_data());
+    strcpy_s(channel, channel_name.get_data());
   } else {
     return false;
   }
@@ -134,41 +144,38 @@ void GDSpoutSender::_release_sender() {
 
 void GDSpoutSender::_update_sender() {
 
-   printf("fuga1\n");
+  printf("fuga1\n");
 
   // Check texture
   if (_texture.is_null()) {
     return;
   }
 
-  
-   printf("fuga2\n");
+  printf("fuga2\n");
 
   unsigned int width, height;
   char channel[256] = {};
 
   // Check initialized
   if (!_is_initialized()) {
-    
-   printf("fuga3\n");
+
+    printf("fuga3\n");
     if (!_create_sender(_channel_name)) {
       return;
     }
   }
 
-  
-   printf("fuga4\n");
+  printf("fuga4\n");
 
   // Check channel name
   CharString channel_name = _channel_name.utf8();
   if (channel_name.length() > 0) {
-    strcpy(channel, channel_name.get_data());
+    strcpy_s(channel, channel_name.get_data());
   } else {
     return;
   }
 
-  
-   printf("fuga5\n");
+  printf("fuga5\n");
 
   // Sender size
   width = static_cast<unsigned int>(_texture->get_width());
@@ -178,20 +185,19 @@ void GDSpoutSender::_update_sender() {
     return;
   }
 
-  
-   printf("fuga6\n");
+  printf("fuga6\n");
 
   // Update sender
   if (_make_current()) {
     _sender->UpdateSender(channel, width, height);
-    
-   printf("fuga7\n");
+
+    printf("fuga7\n");
   }
 }
 
 void GDSpoutSender::_send_texture() {
 
-  //printf("GDSpoutSender::_send_texture\n");
+  // printf("GDSpoutSender::_send_texture\n");
 
   // Check texture
   if (_texture.is_null()) {

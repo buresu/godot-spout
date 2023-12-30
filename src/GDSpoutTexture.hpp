@@ -6,16 +6,16 @@ class SpoutReceiver;
 
 namespace godot {
 
-  class GDSpoutTexture : public Texture2D {
-    GDCLASS(GDSpoutTexture, Texture2D)
-    public:
-    GDSpoutTexture() {}
-    virtual ~GDSpoutTexture() {}
+class GDSpoutTexture : public Texture2D {
+  GDCLASS(GDSpoutTexture, Texture2D)
+public:
+  GDSpoutTexture() {}
+  virtual ~GDSpoutTexture() {}
 
-    protected:
-    static void _bind_methods() {}
-  };
-}
+protected:
+  static void _bind_methods() {}
+};
+} // namespace godot
 
 #if 0
 #include <Godot.hpp>
