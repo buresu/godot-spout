@@ -17,13 +17,12 @@ else()
     set(BITS "32")
 endif()
 
-find_package(OpenGL REQUIRED)
+add_subdirectory(${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutGL)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-include_directories(${PROJECT_SOURCE_DIR}/lib/Spout2/SpoutSDK/Source)
 include_directories(${PROJECT_SOURCE_DIR}/lib/godot-cpp/gdextension)
 include_directories(${PROJECT_SOURCE_DIR}/lib/godot-cpp/include)
 include_directories(${PROJECT_SOURCE_DIR}/lib/godot-cpp/gen/include)
@@ -33,18 +32,18 @@ link_directories(${PROJECT_SOURCE_DIR}/lib/godot-cpp/bin)
 file(GLOB SPOUT_SOURCES ${PROJECT_SOURCE_DIR}/lib/Spout2/SpoutSDK/Source/*.cpp)
 file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h" "src/*.hpp")
 
-add_library(Spout ${SPOUT_SOURCES})
-add_library(SpoutPlugind SHARED ${SOURCES})
+add_library(GodotSpout SHARED ${SOURCES})
 
-target_link_libraries(Spout opengl32)
-target_link_libraries(SpoutPlugind Spout optimized libgodot-cpp.windows.template_release.x86_${BITS} debug libgodot-cpp.windows.template_debug.x86_${BITS})
+target_include_directories(GodotSpout PRIVATE ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutGL)
+
+target_link_libraries(GodotSpout Spout_static optimized libgodot-cpp.windows.template_release.x86_${BITS} debug libgodot-cpp.windows.template_debug.x86_${BITS})
 
 add_custom_command(
-    TARGET SpoutPlugind
+    TARGET GodotSpout
     PRE_BUILD
     COMMAND scons platform=windows target=$<$<CONFIG:Debug>:template_debug>$<$<CONFIG:Release>:template_release> bits=${BITS}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/lib/godot-cpp
 )
 
-install(TARGETS SpoutPlugind RUNTIME DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/SpoutPlugin)
+install(TARGETS GodotSpout RUNTIME DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/bin)
 install(FILES ${PROJECT_SOURCE_DIR}/res/spout.gdextension DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/SpoutPlugin)
