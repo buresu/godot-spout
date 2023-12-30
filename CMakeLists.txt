@@ -23,6 +23,8 @@ file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h" "src/*.hpp")
 
 add_library(GodotSpout SHARED ${SOURCES})
 
+set_target_properties(GodotSpout PROPERTIES DEBUG_POSTFIX d)
+
 target_include_directories(GodotSpout PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(GodotSpout PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(GodotSpout PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
