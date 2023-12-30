@@ -19,23 +19,19 @@ endif()
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutGL)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(${CMAKE_CURRENT_BINARY_DIR})
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
-
-include_directories(${PROJECT_SOURCE_DIR}/lib/godot-cpp/gdextension)
-include_directories(${PROJECT_SOURCE_DIR}/lib/godot-cpp/include)
-include_directories(${PROJECT_SOURCE_DIR}/lib/godot-cpp/gen/include)
-
-link_directories(${PROJECT_SOURCE_DIR}/lib/godot-cpp/bin)
-
-file(GLOB SPOUT_SOURCES ${PROJECT_SOURCE_DIR}/lib/Spout2/SpoutSDK/Source/*.cpp)
 file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h" "src/*.hpp")
 
 add_library(GodotSpout SHARED ${SOURCES})
 
+target_include_directories(GodotSpout PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(GodotSpout PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(GodotSpout PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(GodotSpout PRIVATE ${PROJECT_SOURCE_DIR}/lib/godot-cpp/gdextension)
+target_include_directories(GodotSpout PRIVATE ${PROJECT_SOURCE_DIR}/lib/godot-cpp/include)
+target_include_directories(GodotSpout PRIVATE ${PROJECT_SOURCE_DIR}/lib/godot-cpp/gen/include)
 target_include_directories(GodotSpout PRIVATE ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutGL)
 
+target_link_directories(GodotSpout PRIVATE ${PROJECT_SOURCE_DIR}/lib/godot-cpp/bin)
 target_link_libraries(GodotSpout Spout_static optimized libgodot-cpp.windows.template_release.x86_${BITS} debug libgodot-cpp.windows.template_debug.x86_${BITS})
 
 add_custom_command(
