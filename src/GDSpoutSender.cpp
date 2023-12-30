@@ -25,8 +25,10 @@ void GDSpoutSender::_bind_methods() {
   // Add properties
   ClassDB::add_property("GDSpoutSender", {Variant::STRING, "channel_name"},
                         "set_channel_name", "get_channel_name");
-  ClassDB::add_property("GDSpoutSender", {Variant::OBJECT, "texture"},
-                        "set_texture", "get_texture");
+  ClassDB::add_property(
+      "GDSpoutSender",
+      {Variant::OBJECT, "texture", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D"},
+      "set_texture", "get_texture");
 }
 
 GDSpoutSender::GDSpoutSender() : Node() {
