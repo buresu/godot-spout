@@ -50,16 +50,14 @@ GDSpoutSender::~GDSpoutSender() {
 
 void GDSpoutSender::_ready() {
 
-  printf("GDSpoutSender::_ready\n");
-
   // Initialize
   _update_sender();
 }
 
 String GDSpoutSender::get_channel_name() const { return _channel_name; }
 
-void GDSpoutSender::set_channel_name(String name) {
-  _channel_name = name;
+void GDSpoutSender::set_channel_name(String p_name) {
+  _channel_name = p_name;
   _update_sender();
 }
 
@@ -91,8 +89,6 @@ bool GDSpoutSender::_create_sender() {
     return false;
   }
 
-  printf("hoge2\n");
-
   // Release sender
   _release_sender();
 
@@ -108,7 +104,6 @@ bool GDSpoutSender::_create_sender() {
 
   if (_make_current()) {
     if (_sender->CreateSender(channel, width, height)) {
-      printf("hoge6\n");
       return true;
     }
   }
@@ -147,8 +142,6 @@ void GDSpoutSender::_update_sender() {
     }
   }
 
-  printf("fuga4\n");
-
   // Sender name
   auto channel = _channel_name.utf8();
 
@@ -159,7 +152,6 @@ void GDSpoutSender::_update_sender() {
   // Update sender
   if (_make_current()) {
     _sender->UpdateSender(channel, width, height);
-    printf("fuga7\n");
   }
 }
 

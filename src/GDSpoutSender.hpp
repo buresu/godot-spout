@@ -14,7 +14,7 @@ public:
   virtual ~GDSpoutSender();
 
   String get_channel_name() const;
-  void set_channel_name(String name);
+  void set_channel_name(String p_name);
 
   Ref<Texture> get_texture() const;
   void set_texture(Ref<Texture> p_texture);
