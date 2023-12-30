@@ -77,7 +77,7 @@ bool GDSpoutSender::_make_current() {
 
 bool GDSpoutSender::_is_initialized() const { return _sender != nullptr; }
 
-bool GDSpoutSender::_create_sender(const String &name) {
+bool GDSpoutSender::_create_sender() {
 
   printf("hoge1\n");
 
@@ -88,14 +88,13 @@ bool GDSpoutSender::_create_sender(const String &name) {
 
   printf("hoge2\n");
 
-  unsigned int width, height;
   char channel[256] = {};
 
   // Release sender
   _release_sender();
 
   // Check channel name
-  CharString channel_name = name.utf8();
+  CharString channel_name = _channel_name.utf8();
   if (channel_name.length() > 0) {
     strcpy_s(channel, channel_name.get_data());
   } else {
@@ -105,20 +104,14 @@ bool GDSpoutSender::_create_sender(const String &name) {
   printf("hoge3\n");
 
   // Sender size
-  width = static_cast<unsigned int>(_texture->get_width());
-  height = static_cast<unsigned int>(_texture->get_height());
-
-  if (!(width > 0 && height > 0)) {
-    return false;
-  }
-
-  printf("hoge4\n");
+  auto width = static_cast<unsigned int>(_texture->get_width());
+  auto height = static_cast<unsigned int>(_texture->get_height());
 
   // Create sender
   _sender = new SpoutSender();
 
   if (_make_current()) {
-    printf("hoge5\n");
+    printf("hoge5 %d, %d\n", width, height);
     if (_sender->CreateSender(channel, width, height)) {
       printf("hoge6\n");
       return true;
@@ -151,14 +144,13 @@ void GDSpoutSender::_update_sender() {
 
   printf("fuga2\n");
 
-  unsigned int width, height;
   char channel[256] = {};
 
   // Check initialized
   if (!_is_initialized()) {
 
     printf("fuga3\n");
-    if (!_create_sender(_channel_name)) {
+    if (!_create_sender()) {
       return;
     }
   }
@@ -176,14 +168,8 @@ void GDSpoutSender::_update_sender() {
   printf("fuga5\n");
 
   // Sender size
-  width = static_cast<unsigned int>(_texture->get_width());
-  height = static_cast<unsigned int>(_texture->get_height());
-
-  if (!(width > 0 && height > 0)) {
-    return;
-  }
-
-  printf("fuga6\n");
+  auto width = static_cast<unsigned int>(_texture->get_width());
+  auto height = static_cast<unsigned int>(_texture->get_height());
 
   // Update sender
   if (_make_current()) {
@@ -195,8 +181,6 @@ void GDSpoutSender::_update_sender() {
 
 void GDSpoutSender::_send_texture() {
 
-  // printf("GDSpoutSender::_send_texture\n");
-
   // Check texture
   if (_texture.is_null()) {
     return;
@@ -204,16 +188,23 @@ void GDSpoutSender::_send_texture() {
 
   // Check initialized
   if (!_is_initialized()) {
-    return;
+    if (!_create_sender()) {
+      return;
+    }
   }
 
   // Get texture id
-  RenderingServer *rs = RenderingServer::get_singleton();
-  GLint tex_id = GLint(rs->texture_get_native_handle(_texture->get_rid()));
+  auto rs = RenderingServer::get_singleton();
+  auto tex_id =
+      static_cast<GLint>(rs->texture_get_native_handle(_texture->get_rid()));
 
   // Get texture size
-  GLint width = static_cast<unsigned int>(_texture->get_width());
-  GLint height = static_cast<unsigned int>(_texture->get_height());
+  auto width = static_cast<unsigned int>(_texture->get_width());
+  auto height = static_cast<unsigned int>(_texture->get_height());
+
+  if (_sender->GetWidth() != width || _sender->GetHeight() != height) {
+    _update_sender();
+  }
 
   // Send texture
   if (_make_current()) {
