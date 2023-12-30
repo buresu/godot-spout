@@ -79,29 +79,23 @@ bool GDSpoutSender::_is_initialized() const { return _sender != nullptr; }
 
 bool GDSpoutSender::_create_sender() {
 
-  printf("hoge1\n");
-
   // Check texture
   if (_texture.is_null()) {
     return false;
   }
 
-  printf("hoge2\n");
+  // Check channel name
+  if (_channel_name.is_empty()) {
+    return false;
+  }
 
-  char channel[256] = {};
+  printf("hoge2\n");
 
   // Release sender
   _release_sender();
 
-  // Check channel name
-  CharString channel_name = _channel_name.utf8();
-  if (channel_name.length() > 0) {
-    strcpy_s(channel, channel_name.get_data());
-  } else {
-    return false;
-  }
-
-  printf("hoge3\n");
+  // Sender name
+  auto channel = _channel_name.utf8();
 
   // Sender size
   auto width = static_cast<unsigned int>(_texture->get_width());
@@ -111,7 +105,6 @@ bool GDSpoutSender::_create_sender() {
   _sender = new SpoutSender();
 
   if (_make_current()) {
-    printf("hoge5 %d, %d\n", width, height);
     if (_sender->CreateSender(channel, width, height)) {
       printf("hoge6\n");
       return true;
@@ -135,21 +128,18 @@ void GDSpoutSender::_release_sender() {
 
 void GDSpoutSender::_update_sender() {
 
-  printf("fuga1\n");
-
   // Check texture
   if (_texture.is_null()) {
     return;
   }
 
-  printf("fuga2\n");
-
-  char channel[256] = {};
+  // Check channel name
+  if (_channel_name.is_empty()) {
+    return;
+  }
 
   // Check initialized
   if (!_is_initialized()) {
-
-    printf("fuga3\n");
     if (!_create_sender()) {
       return;
     }
@@ -157,15 +147,8 @@ void GDSpoutSender::_update_sender() {
 
   printf("fuga4\n");
 
-  // Check channel name
-  CharString channel_name = _channel_name.utf8();
-  if (channel_name.length() > 0) {
-    strcpy_s(channel, channel_name.get_data());
-  } else {
-    return;
-  }
-
-  printf("fuga5\n");
+  // Sender name
+  auto channel = _channel_name.utf8();
 
   // Sender size
   auto width = static_cast<unsigned int>(_texture->get_width());
@@ -174,7 +157,6 @@ void GDSpoutSender::_update_sender() {
   // Update sender
   if (_make_current()) {
     _sender->UpdateSender(channel, width, height);
-
     printf("fuga7\n");
   }
 }
@@ -202,6 +184,7 @@ void GDSpoutSender::_send_texture() {
   auto width = static_cast<unsigned int>(_texture->get_width());
   auto height = static_cast<unsigned int>(_texture->get_height());
 
+  // Update sender if resized
   if (_sender->GetWidth() != width || _sender->GetHeight() != height) {
     _update_sender();
   }
