@@ -1,19 +1,15 @@
 #pragma once
 
-#include <Godot.hpp>
-#include <Node.hpp>
-#include <Texture.hpp>
+#include <godot_cpp/classes/node.hpp>
+#include <godot_cpp/classes/texture2d.hpp>
 
 class SpoutSender;
 
 namespace godot {
 
 class GDSpoutSender : public Node {
-  GODOT_CLASS(GDSpoutSender, Node)
+  GDCLASS(GDSpoutSender, Node)
 public:
-  void _init();
-  static void _register_methods();
-
   GDSpoutSender();
   virtual ~GDSpoutSender();
 
@@ -21,9 +17,12 @@ public:
   void set_channel_name(String name);
 
   Ref<Texture> get_texture() const;
-  void set_texture(Ref<Texture> texture);
+  void set_texture(Ref<Texture> p_texture);
+
+  void _ready() override;
 
 protected:
+  static void _bind_methods();
   bool _make_current();
   bool _is_initialized() const;
   bool _create_sender(const String &name);
@@ -34,8 +33,8 @@ protected:
 private:
   // Spout
   SpoutSender *_sender = nullptr;
-  String _channel_name;
-  Ref<Texture> _texture;
+  String _channel_name = "godot-spout";
+  Ref<Texture2D> _texture;
 };
 
 } // namespace godot

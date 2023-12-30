@@ -1,4 +1,5 @@
 #include "GDSpoutTexture.hpp"
+#if 0
 #include <SpoutReceiver.h>
 #include <VisualServer.hpp>
 
@@ -130,3 +131,4 @@ void GDSpoutTexture::_receive_texture() {
   _receiver->ReceiveTexture(channel, width, height, tex_id, GL_TEXTURE_2D,
                             false, fbo_id);
 }
+#endif
