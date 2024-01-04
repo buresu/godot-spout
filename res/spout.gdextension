@@ -5,5 +5,5 @@ compatibility_minimum = "4.2"
 
 [libraries]
 
-windows.debug.x86_64 = "res://bin/SpoutPlugin.dll"
+windows.debug.x86_64 = "res://bin/SpoutPlugind.dll"
 windows.release.x86_64 = "res://bin/SpoutPlugin.dll"
