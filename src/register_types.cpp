@@ -12,7 +12,7 @@ void initialize_spout_module(ModuleInitializationLevel p_level) {
   }
 
   ClassDB::register_class<GDSpoutSender>();
-  // ClassDB::register_class<GDSpoutTexture>();
+  ClassDB::register_class<GDSpoutTexture>();
 }
 
 void uninitialize_spout_module(ModuleInitializationLevel p_level) {

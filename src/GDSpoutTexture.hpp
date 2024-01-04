@@ -1,25 +1,18 @@
 #pragma once
 
-#include <godot_cpp/classes/texture2d.hpp>
-#include <godot_cpp/classes/viewport_texture.hpp>
+#include <godot_cpp/classes/texture2drd.hpp>
 
 class SpoutReceiver;
 
 namespace godot {
 
-class ViewportTexture;
+class RenderingDevice;
 
-class GDSpoutTexture : public Texture2D {
-  GDCLASS(GDSpoutTexture, Texture2D)
+class GDSpoutTexture : public Texture2DRD {
+  GDCLASS(GDSpoutTexture, Texture2DRD)
 public:
   GDSpoutTexture();
   virtual ~GDSpoutTexture();
-
-  // _get_rid() is not supported yet
-  virtual RID _get_rid() const;
-  virtual int32_t _get_width() const override;
-  virtual int32_t _get_height() const override;
-  virtual bool _has_alpha() const override;
 
   String get_channel_name() const;
   void set_channel_name(String p_name);
@@ -33,6 +26,9 @@ protected:
   void _receive_texture();
 
 private:
+  // Rendering device
+  RenderingDevice *_device = nullptr;
+
   // Texture
   mutable RID _texture;
   int32_t _width = 0;

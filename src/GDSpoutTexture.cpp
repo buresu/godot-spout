@@ -1,5 +1,8 @@
 #include "GDSpoutTexture.hpp"
 
+#include <godot_cpp/classes/rd_texture_format.hpp>
+#include <godot_cpp/classes/rd_texture_view.hpp>
+#include <godot_cpp/classes/rendering_device.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 
 #include <SpoutReceiver.h>
@@ -9,7 +12,6 @@ using namespace godot;
 void GDSpoutTexture::_bind_methods() {
 
   // Bind methods
-  ClassDB::bind_method(D_METHOD("_get_rid"), &GDSpoutTexture::_get_rid);
   ClassDB::bind_method(D_METHOD("_receive_texture"),
                        &GDSpoutTexture::_receive_texture);
   ClassDB::bind_method(D_METHOD("get_channel_name"),
@@ -22,13 +24,14 @@ void GDSpoutTexture::_bind_methods() {
                         "set_channel_name", "get_channel_name");
 }
 
-GDSpoutTexture::GDSpoutTexture() : Texture2D() {
-
-  printf("call!");
+GDSpoutTexture::GDSpoutTexture() : Texture2DRD() {
 
   // Connect
   RenderingServer::get_singleton()->connect("frame_pre_draw",
                                             {this, "_receive_texture"});
+
+  // Get device
+  _device = RenderingServer::get_singleton()->create_local_rendering_device();
 }
 
 GDSpoutTexture::~GDSpoutTexture() {
@@ -39,39 +42,6 @@ GDSpoutTexture::~GDSpoutTexture() {
 
   // Release receiver
   _release_receiver();
-
-  // Free texture
-  if (_texture.is_valid()) {
-    RenderingServer::get_singleton()->free_rid(_texture);
-  }
-}
-
-RID GDSpoutTexture::_get_rid() const {
-
-  printf("_get_rid()\n");
-
-  // Create texture
-  if (!_texture.is_valid()) {
-    auto rs = RenderingServer::get_singleton();
-    _texture = rs->texture_2d_placeholder_create();
-  }
-
-  return _texture;
-}
-
-int32_t GDSpoutTexture::_get_width() const {
-  printf("_get_width()\n");
-  return _width;
-}
-
-int32_t GDSpoutTexture::_get_height() const {
-  printf("_get_height()\n");
-  return _height;
-}
-
-bool GDSpoutTexture::_has_alpha() const {
-  printf("_has_alpha()\n");
-  return false;
 }
 
 String GDSpoutTexture::get_channel_name() const { return _channel_name; }
@@ -97,12 +67,11 @@ bool GDSpoutTexture::_create_receiver() {
 
   printf("_create_receiver()\n");
 
+  if (!_device) {
+    return false;
+  }
+
   printf("hoge!!1");
-
-  // Get rid
-  auto rid = get_rid();
-
-  printf("hoge!!2");
 
   // Channel name
   char channel[256] = "obs";
@@ -128,8 +97,12 @@ bool GDSpoutTexture::_create_receiver() {
 
   unsigned int width, height;
 
-  if (!_receiver->CreateReceiver(channel, width, height)) {
-    _release_receiver();
+  if (_make_current()) {
+    if (!_receiver->CreateReceiver(channel, width, height)) {
+      _release_receiver();
+      return false;
+    }
+  } else {
     return false;
   }
 
@@ -139,10 +112,29 @@ bool GDSpoutTexture::_create_receiver() {
   _width = width;
   _height = height;
 
-  auto rs = RenderingServer::get_singleton();
-  rs->texture_set_size_override(rid, width, height);
-
   printf("hoge!!7 %dx%d", width, height);
+
+  printf("hoge!!8 %p", _device);
+
+  auto format = Ref(new RDTextureFormat);
+
+  format->set_texture_type(RenderingDevice::TEXTURE_TYPE_2D);
+  format->set_format(RenderingDevice::DATA_FORMAT_R8G8B8A8_UINT);
+  format->set_width(width);
+  format->set_height(height);
+  format->set_depth(1);
+  format->set_array_layers(1);
+  format->set_mipmaps(1);
+  format->set_usage_bits(RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT |
+                         RenderingDevice::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT |
+                         RenderingDevice::TEXTURE_USAGE_STORAGE_BIT |
+                         RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT);
+
+  _texture = _device->texture_create(format, Ref(new RDTextureView));
+
+  set_texture_rd_rid(_texture);
+
+  printf("hoge!!13 %dx%d", width, height);
 
   return true;
 }
@@ -152,6 +144,9 @@ void GDSpoutTexture::_release_receiver() {
     _receiver->ReleaseReceiver();
     delete _receiver;
     _receiver = nullptr;
+    if (_texture.is_valid()) {
+      _device->free_rid(_texture);
+    }
     _width = 0;
     _height = 0;
   }
@@ -161,10 +156,11 @@ void GDSpoutTexture::_receive_texture() {
 
   printf("_receive_texture()\n");
 
-  printf("fuga!!1");
+  if (!_device) {
+    return;
+  }
 
-  // Get rid
-  auto rid = get_rid();
+  printf("fuga!!1");
 
   printf("fuga!!2");
 
@@ -204,15 +200,22 @@ void GDSpoutTexture::_receive_texture() {
     return;
   }*/
 
+  if (width != _width || height != _height) {
+    if (!_create_receiver()) {
+      return;
+    }
+  }
+
   printf("fuga!!6 %dx%d", width, height);
 
   // Get texture id
-  auto rs = RenderingServer::get_singleton();
-  auto tex_id = static_cast<GLuint>(rs->texture_get_native_handle(rid));
+  auto tex_id =
+      static_cast<GLuint>(_device->texture_get_native_handle(_texture));
 
   // Receive texture
-  auto res = _receiver->ReceiveTexture(channel, width, height, tex_id,
-                                       GL_TEXTURE_2D, false);
-
-  printf("fuga!!7 %d", res);
+  if (_make_current()) {
+    auto res = _receiver->ReceiveTexture(channel, width, height, tex_id,
+                                         GL_TEXTURE_2D, false);
+    printf("fuga!!7 %d", res);
+  }
 }
