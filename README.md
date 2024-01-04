@@ -1,7 +1,7 @@
 # godot-spout
-[WIP] Godot Spout Plugin via GDExtension
-The current functionality is limited to transmission in compatibility mode only.
-I'm waiting for DirectX12 support.
+[WIP] Godot Spout Plugin via GDExtension  
+The current functionality is limited to transmission in compatibility mode only.  
+I'm waiting for DirectX12 support.  
 
 # Build
 ```
