@@ -44,4 +44,4 @@ add_custom_command(
 )
 
 install(TARGETS GodotSpout RUNTIME DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/bin)
-install(FILES ${PROJECT_SOURCE_DIR}/res/spout.gdextension DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/SpoutPlugin)
+install(FILES ${PROJECT_SOURCE_DIR}/res/spout.gdextension DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/bin)

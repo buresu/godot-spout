@@ -5,7 +5,6 @@
 #include <godot_cpp/godot.hpp>
 
 #include <SpoutSender.h>
-#include <Windows.h>
 
 using namespace godot;
 

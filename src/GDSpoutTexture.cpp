@@ -1,72 +1,148 @@
 #include "GDSpoutTexture.hpp"
-#if 0
-#include <SpoutReceiver.h>
-#include <VisualServer.hpp>
 
-#define GL_DRAW_FRAMEBUFFER_BINDING 0x8CA6
+#include <godot_cpp/classes/rendering_server.hpp>
+
+#include <SpoutReceiver.h>
 
 using namespace godot;
 
-void GDSpoutTexture::_init() {
-  // Set pre draw callback
-  VisualServer::get_singleton()->connect("frame_pre_draw", this,
-                                         "_receive_texture");
+void GDSpoutTexture::_bind_methods() {
 
-  // VisualServer::get_singleton()->texture_set_force_redraw_if_visible(texture,
-  // true);
+  // Bind methods
+  ClassDB::bind_method(D_METHOD("_get_rid"), &GDSpoutTexture::_get_rid);
+  ClassDB::bind_method(D_METHOD("_receive_texture"),
+                       &GDSpoutTexture::_receive_texture);
+  ClassDB::bind_method(D_METHOD("get_channel_name"),
+                       &GDSpoutTexture::get_channel_name);
+  ClassDB::bind_method(D_METHOD("set_channel_name", "name"),
+                       &GDSpoutTexture::set_channel_name);
+
+  // Add properties
+  ClassDB::add_property("GDSpoutTexture", {Variant::STRING, "channel_name"},
+                        "set_channel_name", "get_channel_name");
 }
 
-void GDSpoutTexture::_register_methods() {
-  // Register method
-  register_method("_receive_texture", &SpoutTexture::_receive_texture);
-}
+GDSpoutTexture::GDSpoutTexture() : Texture2D() {
 
-GDSpoutTexture::GDSpoutTexture() : Texture() {
-  // Create texture
-  _texture = VisualServer::get_singleton()->texture_create();
+  printf("call!");
+
+  // Connect
+  RenderingServer::get_singleton()->connect("frame_pre_draw",
+                                            {this, "_receive_texture"});
 }
 
 GDSpoutTexture::~GDSpoutTexture() {
+
+  // Disconnect
+  RenderingServer::get_singleton()->disconnect("frame_pre_draw",
+                                               {this, "_receive_texture"});
+
   // Release receiver
   _release_receiver();
 
   // Free texture
-  VisualServer::get_singleton()->free_rid(_texture);
+  if (_texture.is_valid()) {
+    RenderingServer::get_singleton()->free_rid(_texture);
+  }
+}
+
+RID GDSpoutTexture::_get_rid() const {
+
+  printf("_get_rid()\n");
+
+  // Create texture
+  if (!_texture.is_valid()) {
+    auto rs = RenderingServer::get_singleton();
+    _texture = rs->texture_2d_placeholder_create();
+  }
+
+  return _texture;
+}
+
+int32_t GDSpoutTexture::_get_width() const {
+  printf("_get_width()\n");
+  return _width;
+}
+
+int32_t GDSpoutTexture::_get_height() const {
+  printf("_get_height()\n");
+  return _height;
+}
+
+bool GDSpoutTexture::_has_alpha() const {
+  printf("_has_alpha()\n");
+  return false;
+}
+
+String GDSpoutTexture::get_channel_name() const { return _channel_name; }
+
+void GDSpoutTexture::set_channel_name(String p_name) {
+  printf("call!");
+  _channel_name = p_name;
+  //_create_receiver();
+}
+
+bool GDSpoutTexture::_make_current() {
+
+  // Make current context
+  HDC hdc = wglGetCurrentDC();
+  HGLRC hglrc = wglGetCurrentContext();
+
+  return wglMakeCurrent(hdc, hglrc);
 }
 
 bool GDSpoutTexture::_is_initialized() const { return _receiver != nullptr; }
 
-bool GDSpoutTexture::_create_receiver(const String &name) {
+bool GDSpoutTexture::_create_receiver() {
 
-  RID _texture = get_rid();
+  printf("_create_receiver()\n");
 
-  unsigned int width, height;
-  char channel[256] = {};
+  printf("hoge!!1");
 
-  VisualServer *vs = VisualServer::get_singleton();
+  // Get rid
+  auto rid = get_rid();
+
+  printf("hoge!!2");
+
+  // Channel name
+  char channel[256] = "obs";
+  auto buf = _channel_name.utf8();
+
+  /*if (buf.length() > 0) {
+    strcpy_s(channel, buf.length(), buf.get_data());
+  } else {
+    return false;
+  }*/
+
+  printf("hoge!!3");
 
   // Release receiver
   _release_receiver();
 
-  // Check channel name
-  CharString channel_name = name.utf8();
-  if (channel_name.length() > 0) {
-    strcpy_s(channel, channel_name.length(), channel_name.get_data());
-  } else {
-    return false;
-  }
+  printf("hoge!!4");
 
   // Create receiver
   _receiver = new SpoutReceiver();
 
-  if (!_receiver->CreateReceiver(channel, width, height, true)) {
+  printf("hoge!!5");
+
+  unsigned int width, height;
+
+  if (!_receiver->CreateReceiver(channel, width, height)) {
     _release_receiver();
     return false;
   }
 
-  // Allocate texture
-  vs->texture_allocate(_texture, width, height, 0, Image::FORMAT_RGBA8,
-                       VisualServer::TEXTURE_TYPE_2D);
+  printf("hoge!!6");
+
+  // Set texture size
+  _width = width;
+  _height = height;
+
+  auto rs = RenderingServer::get_singleton();
+  rs->texture_set_size_override(rid, width, height);
+
+  printf("hoge!!7 %dx%d", width, height);
 
   return true;
 }
@@ -76,59 +152,67 @@ void GDSpoutTexture::_release_receiver() {
     _receiver->ReleaseReceiver();
     delete _receiver;
     _receiver = nullptr;
+    _width = 0;
+    _height = 0;
   }
 }
 
 void GDSpoutTexture::_receive_texture() {
 
-  RID _texture = get_rid();
+  printf("_receive_texture()\n");
 
-  bool connected;
-  unsigned int width, height;
-  char channel[256] = {};
+  printf("fuga!!1");
 
-  VisualServer *vs = VisualServer::get_singleton();
+  // Get rid
+  auto rid = get_rid();
+
+  printf("fuga!!2");
 
   // Check initialized
   if (!_is_initialized()) {
-    return;
+    if (!_create_receiver()) {
+      return;
+    }
   }
 
-  // Check channel name
-  CharString channel_name = _channel_name.utf8();
-  if (channel_name.length() > 0) {
-    strcpy_s(channel, channel_name.length(), channel_name.get_data());
+  printf("fuga!!3");
+
+  // Channel name
+  char channel[256] = "obs";
+  /*auto buf = _channel_name.utf8();
+
+  if (buf.length() > 0) {
+    strcpy_s(channel, buf.length(), buf.get_data());
   } else {
     return;
-  }
+  }*/
+
+  printf("fuga!!4");
 
   // Check receiver
+  bool connected;
+  unsigned int width, height;
+
   if (!_receiver->CheckReceiver(channel, width, height, connected)) {
     return;
   }
 
-  // Check connected
-  if (!connected) {
-    return;
-  }
+  printf("fuga!!5 %d", connected);
 
-  // Check texture size
-  if (width != _width || height != _height) {
-    vs->texture_set_size_override(_texture, width, height, 0);
-    _width = vs->texture_get_width(_texture);
-    _height = vs->texture_get_height(_texture);
-  }
+  // Check connected
+  /*if (!connected) {
+    return;
+  }*/
+
+  printf("fuga!!6 %dx%d", width, height);
 
   // Get texture id
-  GLint tex_id = GLint(vs->texture_get_texid(_texture));
-
-  // Get fbo id
-  // TODO: Get fbo id from godot api
-  GLint fbo_id = 0;
-  glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &fbo_id);
+  auto rs = RenderingServer::get_singleton();
+  auto tex_id = static_cast<GLuint>(rs->texture_get_native_handle(rid));
 
   // Receive texture
-  _receiver->ReceiveTexture(channel, width, height, tex_id, GL_TEXTURE_2D,
-                            false, fbo_id);
+  auto res = _receiver->ReceiveTexture(channel, width, height, tex_id,
+                                       GL_TEXTURE_2D, false);
+
+  printf("fuga!!7 %d", res);
 }
-#endif
