@@ -1,5 +1,6 @@
 #include "GDSpoutSender.hpp"
 
+#include <godot_cpp/classes/rd_texture_format.hpp>
 #include <godot_cpp/classes/rendering_device.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/core/class_db.hpp>
@@ -146,11 +147,21 @@ bool GDSpoutSender::_create_sender() {
     return false;
   }
 
+  // Determine the DX12 resource state based on texture usage:
+  // ViewportTexture / render target -> RENDER_TARGET
+  // Regular sampled texture         -> PIXEL_SHADER_RESOURCE
+  D3D12_RESOURCE_STATES in_state = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+  auto fmt = _rd->texture_get_format(rd_tex_rid);
+  if (fmt.is_valid()) {
+    auto usage = fmt->get_usage_bits();
+    if (usage & RenderingDevice::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) {
+      in_state = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    }
+  }
+
   // Wrap the DX12 resource as a D3D11on12 resource.
-  // InState:  D3D12_RESOURCE_STATE_RENDER_TARGET  (Godot rendered to it)
-  // OutState: D3D12_RESOURCE_STATE_PRESENT        (D3D11on12 default release)
   if (!_sender->WrapDX12Resource(_d3d12_texture, &_wrapped_resource,
-                                 D3D12_RESOURCE_STATE_RENDER_TARGET)) {
+                                 in_state)) {
     _release_sender();
     return false;
   }
