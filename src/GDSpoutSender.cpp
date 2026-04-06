@@ -1,10 +1,11 @@
 #include "GDSpoutSender.hpp"
 
+#include <godot_cpp/classes/rendering_device.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/godot.hpp>
 
-#include <SpoutSender.h>
+#include <SpoutDX12.h>
 
 using namespace godot;
 
@@ -32,7 +33,7 @@ void GDSpoutSender::_bind_methods() {
 
 GDSpoutSender::GDSpoutSender() : Node() {
 
-  // Connect
+  // Connect to post-draw signal
   RenderingServer::get_singleton()->connect("frame_post_draw",
                                             {this, "_send_texture"});
 }
@@ -48,8 +49,6 @@ GDSpoutSender::~GDSpoutSender() {
 }
 
 void GDSpoutSender::_ready() {
-
-  // Initialize
   _update_sender();
 }
 
@@ -67,123 +66,151 @@ void GDSpoutSender::set_texture(Ref<Texture> p_texture) {
   _update_sender();
 }
 
-bool GDSpoutSender::_make_current() {
-  // Make current context
-  HDC hdc = wglGetCurrentDC();
-  HGLRC hglrc = wglGetCurrentContext();
-  return wglMakeCurrent(hdc, hglrc);
+bool GDSpoutSender::_is_initialized() const {
+  return _sender != nullptr && _wrapped_resource != nullptr;
 }
-
-bool GDSpoutSender::_is_initialized() const { return _sender != nullptr; }
 
 bool GDSpoutSender::_create_sender() {
 
-  // Check texture
-  if (_texture.is_null()) {
+  if (_texture.is_null() || _channel_name.is_empty()) {
     return false;
   }
 
-  // Check channel name
-  if (_channel_name.is_empty()) {
-    return false;
-  }
-
-  // Release sender
   _release_sender();
 
-  // Sender name
+  // Get the main RenderingDevice
+  auto rs = RenderingServer::get_singleton();
+  _rd = rs->get_rendering_device();
+  if (!_rd) {
+    return false;
+  }
+
+  // Reject non-DirectX rendering drivers (Spout requires Direct3D 12)
+  String driver = rs->get_current_rendering_driver_name();
+  if (driver != "d3d12") {
+    ERR_PRINT("GDSpoutSender: Only Direct3D 12 rendering is supported. Current driver: " + driver);
+    _rd = nullptr;
+    return false;
+  }
+
+  // Get the DX12 device (ID3D12Device*)
+  auto d3d12_device = reinterpret_cast<ID3D12Device *>(
+      _rd->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_LOGICAL_DEVICE,
+                               RID(), 0));
+  if (!d3d12_device) {
+    _rd = nullptr;
+    return false;
+  }
+
+  // Get the DX12 graphics command queue (ID3D12CommandQueue*)
+  auto command_queue = reinterpret_cast<IUnknown *>(
+      _rd->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_COMMAND_QUEUE,
+                               RID(), 0));
+  if (!command_queue) {
+    _rd = nullptr;
+    return false;
+  }
+
+  // Create the spoutDX12 sender
+  _sender = new spoutDX12();
+
+  // Set sender name before OpenDirectX12
   auto channel = _channel_name.utf8();
+  _sender->SetSenderName(channel.get_data());
 
-  // Sender size
-  auto width = static_cast<unsigned int>(_texture->get_width());
-  auto height = static_cast<unsigned int>(_texture->get_height());
+  // spoutDX12's destructor calls Release() on the device even for external
+  // devices, so we AddRef here to keep the balance.
+  d3d12_device->AddRef();
 
-  // Create sender
-  _sender = new SpoutSender();
-
-  if (_make_current()) {
-    if (_sender->CreateSender(channel, width, height)) {
-      return true;
-    }
+  // Initialize D3D11on12 using Godot's DX12 device and command queue
+  if (!_sender->OpenDirectX12(d3d12_device, &command_queue)) {
+    delete _sender;
+    _sender = nullptr;
+    _rd = nullptr;
+    return false;
   }
 
-  _release_sender();
+  // Get the RenderingDevice RID for the texture
+  auto rd_tex_rid = rs->texture_get_rd_texture(_texture->get_rid(), false);
+  if (!rd_tex_rid.is_valid()) {
+    _release_sender();
+    return false;
+  }
 
-  return false;
+  // Get the native ID3D12Resource* for the texture
+  _d3d12_texture = reinterpret_cast<ID3D12Resource *>(
+      _rd->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_TEXTURE,
+                               rd_tex_rid, 0));
+  if (!_d3d12_texture) {
+    _release_sender();
+    return false;
+  }
+
+  // Wrap the DX12 resource as a D3D11on12 resource.
+  // InState:  D3D12_RESOURCE_STATE_RENDER_TARGET  (Godot rendered to it)
+  // OutState: D3D12_RESOURCE_STATE_PRESENT        (D3D11on12 default release)
+  if (!_sender->WrapDX12Resource(_d3d12_texture, &_wrapped_resource,
+                                 D3D12_RESOURCE_STATE_RENDER_TARGET)) {
+    _release_sender();
+    return false;
+  }
+
+  return true;
 }
 
 void GDSpoutSender::_release_sender() {
-  if (_is_initialized()) {
-    if (_make_current()) {
-      _sender->ReleaseSender();
-    }
-    delete _sender;
+
+  // Release the wrapped D3D11on12 resource before destroying the sender
+  if (_wrapped_resource) {
+    _wrapped_resource->Release();
+    _wrapped_resource = nullptr;
+  }
+
+  // _d3d12_texture is borrowed from Godot — do not Release
+  _d3d12_texture = nullptr;
+
+  if (_sender) {
+    _sender->ReleaseSender();
+    delete _sender; // ~spoutDX12 releases D3D11on12 internals + our AddRef'd device ref
     _sender = nullptr;
   }
+
+  _rd = nullptr;
 }
 
 void GDSpoutSender::_update_sender() {
 
-  // Check texture
-  if (_texture.is_null()) {
+  if (_texture.is_null() || _channel_name.is_empty()) {
     return;
   }
 
-  // Check channel name
-  if (_channel_name.is_empty()) {
-    return;
-  }
-
-  // Check initialized
-  if (!_is_initialized()) {
-    if (!_create_sender()) {
-      return;
-    }
-  }
-
-  // Sender name
-  auto channel = _channel_name.utf8();
-
-  // Sender size
-  auto width = static_cast<unsigned int>(_texture->get_width());
-  auto height = static_cast<unsigned int>(_texture->get_height());
-
-  // Update sender
-  if (_make_current()) {
-    _sender->UpdateSender(channel, width, height);
-  }
+  // Recreate everything; _send_texture will call _create_sender lazily if needed
+  _release_sender();
 }
 
 void GDSpoutSender::_send_texture() {
 
-  // Check texture
   if (_texture.is_null()) {
     return;
   }
 
-  // Check initialized
+  // Lazy initialization
   if (!_is_initialized()) {
     if (!_create_sender()) {
       return;
     }
   }
 
-  // Get texture id
-  auto rs = RenderingServer::get_singleton();
-  auto tex_id =
-      static_cast<GLint>(rs->texture_get_native_handle(_texture->get_rid()));
-
-  // Get texture size
   auto width = static_cast<unsigned int>(_texture->get_width());
   auto height = static_cast<unsigned int>(_texture->get_height());
 
-  // Update sender if resized
+  // Recreate if texture dimensions changed
   if (_sender->GetWidth() != width || _sender->GetHeight() != height) {
-    _update_sender();
+    if (!_create_sender()) {
+      return;
+    }
   }
 
-  // Send texture
-  if (_make_current()) {
-    _sender->SendTexture(tex_id, GL_TEXTURE_2D, width, height, false);
-  }
+  // Send the wrapped DX12 texture via D3D11on12
+  _sender->SendDX11Resource(_wrapped_resource);
 }
