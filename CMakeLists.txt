@@ -17,7 +17,7 @@ else()
     set(BITS "32")
 endif()
 
-add_subdirectory(${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutGL)
+add_subdirectory(${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutGL EXCLUDE_FROM_ALL)
 
 file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h" "src/*.hpp")
 
