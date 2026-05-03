@@ -1,0 +1,9 @@
+[configuration]
+
+entry_symbol = "spout_library_init"
+compatibility_minimum = "4.2"
+
+[libraries]
+
+windows.debug.x86_64 = "res://addons/godot-spout/bin/SpoutPlugind.dll"
+windows.release.x86_64 = "res://addons/godot-spout/bin/SpoutPlugin.dll"

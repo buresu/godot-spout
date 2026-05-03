@@ -32,7 +32,10 @@ file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h" "src/*.hpp")
 
 add_library(GodotSpout SHARED ${SOURCES})
 
-set_target_properties(GodotSpout PROPERTIES DEBUG_POSTFIX d)
+set_target_properties(GodotSpout PROPERTIES
+    OUTPUT_NAME "SpoutPlugin"
+    DEBUG_POSTFIX d
+)
 
 target_include_directories(GodotSpout PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(GodotSpout PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -54,5 +57,4 @@ add_custom_command(
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/lib/godot-cpp
 )
 
-install(TARGETS GodotSpout RUNTIME DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/bin)
-install(FILES ${PROJECT_SOURCE_DIR}/res/spout.gdextension DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/bin)
+install(TARGETS GodotSpout RUNTIME DESTINATION ${PROJECT_SOURCE_DIR}/demo/addons/godot-spout/bin)
