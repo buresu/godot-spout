@@ -49,22 +49,18 @@ GDSpoutSender::~GDSpoutSender() {
   _release_sender();
 }
 
-void GDSpoutSender::_ready() {
-  _update_sender();
-}
-
 String GDSpoutSender::get_channel_name() const { return _channel_name; }
 
 void GDSpoutSender::set_channel_name(String p_name) {
   _channel_name = p_name;
-  _update_sender();
+  _release_sender();
 }
 
 Ref<Texture> GDSpoutSender::get_texture() const { return _texture; }
 
 void GDSpoutSender::set_texture(Ref<Texture> p_texture) {
   _texture = p_texture;
-  _update_sender();
+  _release_sender();
 }
 
 bool GDSpoutSender::_is_initialized() const {
@@ -189,15 +185,6 @@ void GDSpoutSender::_release_sender() {
   _rd = nullptr;
 }
 
-void GDSpoutSender::_update_sender() {
-
-  if (_texture.is_null() || _channel_name.is_empty()) {
-    return;
-  }
-
-  // Recreate everything; _send_texture will call _create_sender lazily if needed
-  _release_sender();
-}
 
 void GDSpoutSender::_send_texture() {
 
@@ -215,8 +202,17 @@ void GDSpoutSender::_send_texture() {
   auto width = static_cast<unsigned int>(_texture->get_width());
   auto height = static_cast<unsigned int>(_texture->get_height());
 
-  // Recreate if texture dimensions changed
-  if (_sender->GetWidth() != width || _sender->GetHeight() != height) {
+  // Recreate if the underlying D3D12 resource changed (e.g. ViewportTexture resize)
+  // or if texture dimensions changed
+  auto rs = RenderingServer::get_singleton();
+  auto rd_tex_rid = rs->texture_get_rd_texture(_texture->get_rid(), false);
+  auto current_d3d12 = rd_tex_rid.is_valid()
+      ? reinterpret_cast<ID3D12Resource *>(_rd->get_driver_resource(
+            RenderingDevice::DRIVER_RESOURCE_TEXTURE, rd_tex_rid, 0))
+      : nullptr;
+
+  if (current_d3d12 != _d3d12_texture ||
+      _sender->GetWidth() != width || _sender->GetHeight() != height) {
     if (!_create_sender()) {
       return;
     }
