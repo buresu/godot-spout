@@ -2,6 +2,9 @@
 
 [ext_resource type="Script" uid="uid://5a3tllp17j2v" path="res://scripts/sender_demo.gd" id="1_sndr"]
 
+[sub_resource type="ViewportTexture" id="ViewportTexture_1"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
 [node name="SenderDemo" type="Control" unique_id=790637478]
 layout_mode = 3
 anchors_preset = 15
@@ -13,6 +16,7 @@ script = ExtResource("1_sndr")
 
 [node name="GDSpoutSender" type="GDSpoutSender" parent="." unique_id=1025210460]
 channel_name = "godot-spout"
+texture = SubResource("ViewportTexture_1")
 
 [node name="SubViewportContainer" type="SubViewportContainer" parent="." unique_id=1795130122]
 layout_mode = 1
