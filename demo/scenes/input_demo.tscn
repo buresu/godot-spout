@@ -13,7 +13,6 @@ grow_vertical = 2
 script = ExtResource("1_rcvr")
 
 [node name="GDSpoutInput" type="GDSpoutInput" parent="." unique_id=600000002]
-channel_name = "OBS_Spout"
 texture = ExtResource("2_11fwh")
 
 [node name="TextureRect" type="TextureRect" parent="." unique_id=600000003]
