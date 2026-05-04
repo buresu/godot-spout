@@ -137,9 +137,8 @@ bool GDSpoutInput::_create_receiver() {
 
 void GDSpoutInput::_release_receiver() {
 
-  // Release Spout receiver first (releases its internal m_pReceivedResource11
-  // which wraps our Godot-owned D3D12 texture)
   if (_receiver) {
+    _receiver->CloseDirectX12();
     _receiver->ReleaseReceiver();
     delete _receiver;
     _receiver = nullptr;

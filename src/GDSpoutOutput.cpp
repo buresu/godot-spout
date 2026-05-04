@@ -173,6 +173,7 @@ void GDSpoutOutput::_release_sender() {
   _d3d12_texture = nullptr;
 
   if (_sender) {
+    _sender->CloseDirectX12();
     _sender->ReleaseSender();
     delete _sender; // ~spoutDX12 releases D3D11on12 internals + our AddRef'd device ref
     _sender = nullptr;
