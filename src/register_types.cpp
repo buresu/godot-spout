@@ -2,7 +2,7 @@
 
 #include <godot_cpp/core/class_db.hpp>
 
-#include "GDSpoutSender.hpp"
+#include "GDSpoutOutput.hpp"
 // #include "GDSpoutTexture.hpp"
 
 void initialize_spout_module(ModuleInitializationLevel p_level) {
@@ -11,7 +11,7 @@ void initialize_spout_module(ModuleInitializationLevel p_level) {
     return;
   }
 
-  ClassDB::register_class<GDSpoutSender>();
+  ClassDB::register_class<GDSpoutOutput>();
   // ClassDB::register_class<GDSpoutTexture>();
 }
 

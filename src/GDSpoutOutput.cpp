@@ -1,4 +1,4 @@
-#include "GDSpoutSender.hpp"
+#include "GDSpoutOutput.hpp"
 
 #include <godot_cpp/classes/rd_texture_format.hpp>
 #include <godot_cpp/classes/rendering_device.hpp>
@@ -10,36 +10,36 @@
 
 using namespace godot;
 
-void GDSpoutSender::_bind_methods() {
+void GDSpoutOutput::_bind_methods() {
 
   // Bind methods
   ClassDB::bind_method(D_METHOD("_send_texture"),
-                       &GDSpoutSender::_send_texture);
+                       &GDSpoutOutput::_send_texture);
   ClassDB::bind_method(D_METHOD("get_channel_name"),
-                       &GDSpoutSender::get_channel_name);
+                       &GDSpoutOutput::get_channel_name);
   ClassDB::bind_method(D_METHOD("set_channel_name", "name"),
-                       &GDSpoutSender::set_channel_name);
-  ClassDB::bind_method(D_METHOD("get_texture"), &GDSpoutSender::get_texture);
+                       &GDSpoutOutput::set_channel_name);
+  ClassDB::bind_method(D_METHOD("get_texture"), &GDSpoutOutput::get_texture);
   ClassDB::bind_method(D_METHOD("set_texture", "p_texture"),
-                       &GDSpoutSender::set_texture);
+                       &GDSpoutOutput::set_texture);
 
   // Add properties
-  ClassDB::add_property("GDSpoutSender", {Variant::STRING, "channel_name"},
+  ClassDB::add_property("GDSpoutOutput", {Variant::STRING, "channel_name"},
                         "set_channel_name", "get_channel_name");
   ClassDB::add_property(
-      "GDSpoutSender",
+      "GDSpoutOutput",
       {Variant::OBJECT, "texture", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D"},
       "set_texture", "get_texture");
 }
 
-GDSpoutSender::GDSpoutSender() : Node() {
+GDSpoutOutput::GDSpoutOutput() : Node() {
 
   // Connect to post-draw signal
   RenderingServer::get_singleton()->connect("frame_post_draw",
                                             {this, "_send_texture"});
 }
 
-GDSpoutSender::~GDSpoutSender() {
+GDSpoutOutput::~GDSpoutOutput() {
 
   // Disconnect
   RenderingServer::get_singleton()->disconnect("frame_post_draw",
@@ -49,25 +49,25 @@ GDSpoutSender::~GDSpoutSender() {
   _release_sender();
 }
 
-String GDSpoutSender::get_channel_name() const { return _channel_name; }
+String GDSpoutOutput::get_channel_name() const { return _channel_name; }
 
-void GDSpoutSender::set_channel_name(String p_name) {
+void GDSpoutOutput::set_channel_name(String p_name) {
   _channel_name = p_name;
   _release_sender();
 }
 
-Ref<Texture> GDSpoutSender::get_texture() const { return _texture; }
+Ref<Texture> GDSpoutOutput::get_texture() const { return _texture; }
 
-void GDSpoutSender::set_texture(Ref<Texture> p_texture) {
+void GDSpoutOutput::set_texture(Ref<Texture> p_texture) {
   _texture = p_texture;
   _release_sender();
 }
 
-bool GDSpoutSender::_is_initialized() const {
+bool GDSpoutOutput::_is_initialized() const {
   return _sender != nullptr && _wrapped_resource != nullptr;
 }
 
-bool GDSpoutSender::_create_sender() {
+bool GDSpoutOutput::_create_sender() {
 
   if (_texture.is_null() || _channel_name.is_empty()) {
     return false;
@@ -85,7 +85,7 @@ bool GDSpoutSender::_create_sender() {
   // Reject non-DirectX rendering drivers (Spout requires Direct3D 12)
   String driver = rs->get_current_rendering_driver_name();
   if (driver != "d3d12") {
-    ERR_PRINT("GDSpoutSender: Only Direct3D 12 rendering is supported. Current driver: " + driver);
+    ERR_PRINT("GDSpoutOutput: Only Direct3D 12 rendering is supported. Current driver: " + driver);
     return false;
   }
 
@@ -161,7 +161,7 @@ bool GDSpoutSender::_create_sender() {
   return true;
 }
 
-void GDSpoutSender::_release_sender() {
+void GDSpoutOutput::_release_sender() {
 
   // Release the wrapped D3D11on12 resource before destroying the sender
   if (_wrapped_resource) {
@@ -180,7 +180,7 @@ void GDSpoutSender::_release_sender() {
 }
 
 
-void GDSpoutSender::_send_texture() {
+void GDSpoutOutput::_send_texture() {
 
   if (_texture.is_null()) {
     return;

@@ -1,7 +1,6 @@
-[gd_scene format=3 uid="uid://csenderdemo1"]
+[gd_scene format=3 uid="uid://coutputdemo1"]
 
-[ext_resource type="Script" uid="uid://5a3tllp17j2v" path="res://scripts/sender_demo.gd" id="1_sndr"]
-[ext_resource type="Texture2D" uid="uid://c2orp2xy6v6ns" path="res://textures/icon.svg" id="2_icon"]
+[ext_resource type="Script" uid="uid://5a3tllp17j2v" path="res://scripts/output_demo.gd" id="1_sndr"]
 [ext_resource type="Texture2D" uid="uid://bm8cvltg74a00" path="res://textures/viewport_texture.tres" id="3_vptex"]
 
 [node name="SenderDemo" type="Control" unique_id=790637478]
@@ -13,7 +12,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_sndr")
 
-[node name="GDSpoutSender" type="GDSpoutSender" parent="." unique_id=1025210460]
+[node name="GDSpoutOutput" type="GDSpoutOutput" parent="." unique_id=852203754]
 texture = ExtResource("3_vptex")
 
 [node name="SubViewportContainer" type="SubViewportContainer" parent="." unique_id=1795130122]
@@ -27,7 +26,7 @@ stretch = true
 
 [node name="SubViewport" type="SubViewport" parent="SubViewportContainer" unique_id=1801909746]
 handle_input_locally = false
-size = Vector2i(1920, 1080)
+size = Vector2i(1152, 648)
 render_target_update_mode = 4
 
 [node name="ColorRect" type="ColorRect" parent="SubViewportContainer/SubViewport" unique_id=1304935712]
@@ -57,18 +56,21 @@ vertical_alignment = 1
 
 [node name="ButtonBar" type="HBoxContainer" parent="." unique_id=500000001]
 layout_mode = 1
-anchor_left = 0.0
+anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_top = -50.0
+grow_horizontal = 2
 grow_vertical = 0
 alignment = 1
 
 [node name="ButtonViewport" type="Button" parent="ButtonBar" unique_id=500000002]
 custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
 text = "Viewport Texture"
 
 [node name="ButtonIcon" type="Button" parent="ButtonBar" unique_id=500000003]
 custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
 text = "Icon"

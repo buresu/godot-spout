@@ -11,11 +11,11 @@ namespace godot {
 
 class RenderingDevice;
 
-class GDSpoutSender : public Node {
-  GDCLASS(GDSpoutSender, Node)
+class GDSpoutOutput : public Node {
+  GDCLASS(GDSpoutOutput, Node)
 public:
-  GDSpoutSender();
-  virtual ~GDSpoutSender();
+  GDSpoutOutput();
+  virtual ~GDSpoutOutput();
 
   String get_channel_name() const;
   void set_channel_name(String p_name);
