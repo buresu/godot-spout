@@ -244,6 +244,6 @@ void GDSpoutInput::_receive_texture() {
       _create_texture(width, height);
     }
   } else {
-    _release_texture();
+    _release_receiver();
   }
 }
