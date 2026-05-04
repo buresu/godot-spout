@@ -1,5 +1,5 @@
 # godot-spout
-[WIP] Godot Spout Plugin via GDExtension  
+Godot Spout Plugin via GDExtension  
 The current functionality supports transmission in Forward+ rendering (D3D12) mode only.  
 
 # Build
