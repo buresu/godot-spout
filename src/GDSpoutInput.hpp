@@ -25,22 +25,20 @@ protected:
   bool _is_initialized() const;
   bool _create_receiver();
   void _release_receiver();
+  bool _create_texture(uint32_t p_width, uint32_t p_height);
+  void _release_texture();
   void _receive_texture();
-  bool _recreate_receive_texture(uint32_t p_width, uint32_t p_height);
 
 private:
   // DX12 Spout
   spoutDX12 *_receiver = nullptr;
-  ID3D12Resource *_d3d12_texture = nullptr; // borrowed from Godot — do not Release
 
   // Godot texture
-  Ref<Texture2DRD> _texture;
   RID _rd_texture;
-  uint32_t _width = 0;
-  uint32_t _height = 0;
 
   // Properties
   String _channel_name;
+  Ref<Texture2DRD> _texture;
 };
 
 } // namespace godot

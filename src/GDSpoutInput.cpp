@@ -46,6 +46,7 @@ GDSpoutInput::~GDSpoutInput() {
                                                {this, "_receive_texture"});
 
   _release_receiver();
+  _release_texture();
 }
 
 String GDSpoutInput::get_channel_name() const { return _channel_name; }
@@ -75,6 +76,7 @@ void GDSpoutInput::set_texture(Ref<Texture2DRD> p_texture) {
 bool GDSpoutInput::_is_initialized() const { return _receiver != nullptr; }
 
 bool GDSpoutInput::_create_receiver() {
+
   _release_receiver();
 
   UtilityFunctions::print("GDSpoutInput: _create_receiver() channel='", _channel_name, "'");
@@ -143,52 +145,17 @@ void GDSpoutInput::_release_receiver() {
     delete _receiver;
     _receiver = nullptr;
   }
-
-  // _d3d12_texture is borrowed from Godot — do not Release
-  _d3d12_texture = nullptr;
-
-  // Detach Godot texture then free the RD resource
-  if (_rd_texture.is_valid()) {
-    if (_texture.is_valid()) {
-      _texture->set_texture_rd_rid(RID());
-    }
-    auto rd = RenderingServer::get_singleton()->get_rendering_device();
-    if (rd) {
-      rd->free_rid(_rd_texture);
-    }
-    _rd_texture = RID();
-  }
-
-  _width = 0;
-  _height = 0;
 }
 
-bool GDSpoutInput::_recreate_receive_texture(uint32_t p_width, uint32_t p_height) {
+bool GDSpoutInput::_create_texture(uint32_t p_width, uint32_t p_height) {
 
   auto rd = RenderingServer::get_singleton()->get_rendering_device();
   if (!rd) {
     return false;
   }
 
-  // _d3d12_texture is borrowed from Godot — do not Release.
-  // When called after IsUpdated(), Spout has already nulled m_pReceivedResource11
-  // internally, so it is safe to free the underlying Godot texture immediately.
-  _d3d12_texture = nullptr;
+  _release_texture();
 
-  // Detach and free the old Godot RD texture
-  if (_rd_texture.is_valid()) {
-    if (_texture.is_valid()) {
-      _texture->set_texture_rd_rid(RID());
-    }
-    rd->free_rid(_rd_texture);
-    _rd_texture = RID();
-  }
-
-  _width = p_width;
-  _height = p_height;
-
-  // Create a new Godot RD texture that Spout will copy into.
-  // CAN_COPY_TO_BIT is required because Spout wraps this resource as COPY_DEST.
   Ref<RDTextureFormat> fmt;
   fmt.instantiate();
   fmt->set_format(RenderingDevice::DATA_FORMAT_B8G8R8A8_UNORM);
@@ -212,10 +179,10 @@ bool GDSpoutInput::_recreate_receive_texture(uint32_t p_width, uint32_t p_height
   }
 
   // Get the native ID3D12Resource* — borrowed from Godot, do not Release
-  _d3d12_texture = reinterpret_cast<ID3D12Resource *>(
+  auto d3d12_texture = reinterpret_cast<ID3D12Resource *>(
       rd->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_TEXTURE,
                               _rd_texture, 0));
-  if (!_d3d12_texture) {
+  if (!d3d12_texture) {
     UtilityFunctions::printerr("GDSpoutInput: failed to get D3D12 texture handle");
     rd->free_rid(_rd_texture);
     _rd_texture = RID();
@@ -224,13 +191,27 @@ bool GDSpoutInput::_recreate_receive_texture(uint32_t p_width, uint32_t p_height
 
   UtilityFunctions::print("GDSpoutInput: receive texture created ",
                           p_width, "x", p_height,
-                          " d3d12=", (uint64_t)_d3d12_texture);
+                          " d3d12=", (uint64_t)d3d12_texture);
 
   if (_texture.is_valid()) {
     _texture->set_texture_rd_rid(_rd_texture);
   }
 
   return true;
+}
+
+void GDSpoutInput::_release_texture() {
+
+  if (_rd_texture.is_valid()) {
+    if (_texture.is_valid()) {
+      _texture->set_texture_rd_rid(RID());
+    }
+    auto rd = RenderingServer::get_singleton()->get_rendering_device();
+    if (rd) {
+      rd->free_rid(_rd_texture);
+    }
+    _rd_texture = RID();
+  }
 }
 
 void GDSpoutInput::_receive_texture() {
@@ -245,22 +226,24 @@ void GDSpoutInput::_receive_texture() {
     }
   }
 
-  // Pass our receive texture (null on the first call — Spout will set m_bUpdated)
-  if (!_receiver->ReceiveDX12Resource(&_d3d12_texture)) {
-    if (_d3d12_texture != nullptr) {
-      UtilityFunctions::print("GDSpoutInput: sender disconnected");
-    }
-    return;
-  }
+  auto rs = RenderingServer::get_singleton();
+  auto rd = rs->get_rendering_device();
+  auto rd_tex_rid = _texture->get_texture_rd_rid();
+  auto d3d12_texture = rd_tex_rid.is_valid()
+      ? reinterpret_cast<ID3D12Resource *>(rd->get_driver_resource(
+            RenderingDevice::DRIVER_RESOURCE_TEXTURE, rd_tex_rid, 0))
+      : nullptr;
 
-  // IsUpdated() returns true when a sender connects or its size changes,
-  // and MUST be called to clear m_bUpdated so data can flow next frame.
-  if (_receiver->IsUpdated()) {
-    auto width = _receiver->GetSenderWidth();
-    auto height = _receiver->GetSenderHeight();
-    UtilityFunctions::print("GDSpoutInput: sender updated '",
+  if (_receiver->ReceiveDX12Resource(&d3d12_texture)) {
+    if (_receiver->IsUpdated()) {
+      auto width = _receiver->GetSenderWidth();
+      auto height = _receiver->GetSenderHeight();
+      UtilityFunctions::print("GDSpoutInput: sender updated '",
                             String(_receiver->GetSenderName()),
                             "' ", width, "x", height);
-    _recreate_receive_texture(width, height);
+      _create_texture(width, height);
+    }
+  } else {
+    _release_texture();
   }
 }
