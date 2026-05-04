@@ -7,7 +7,6 @@
 #include <godot_cpp/classes/texture2drd.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/godot.hpp>
-#include <godot_cpp/variant/utility_functions.hpp>
 
 #include <SpoutDX12.h>
 
@@ -79,17 +78,13 @@ bool GDSpoutInput::_create_receiver() {
 
   _release_receiver();
 
-  UtilityFunctions::print("GDSpoutInput: _create_receiver() channel='", _channel_name, "'");
-
   auto rs = RenderingServer::get_singleton();
   auto rd = rs->get_rendering_device();
   if (!rd) {
-    UtilityFunctions::printerr("GDSpoutInput: RenderingDevice not available");
     return false;
   }
 
   String driver = rs->get_current_rendering_driver_name();
-  UtilityFunctions::print("GDSpoutInput: rendering driver=", driver);
   if (driver != "d3d12") {
     ERR_PRINT("GDSpoutInput: Only Direct3D 12 rendering is supported. "
               "Current driver: " +
@@ -100,18 +95,14 @@ bool GDSpoutInput::_create_receiver() {
   auto d3d12_device = reinterpret_cast<ID3D12Device *>(
       rd->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_LOGICAL_DEVICE,
                               RID(), 0));
-  UtilityFunctions::print("GDSpoutInput: D3D12 device=", (uint64_t)d3d12_device);
   if (!d3d12_device) {
-    UtilityFunctions::printerr("GDSpoutInput: failed to get D3D12 device");
     return false;
   }
 
   auto command_queue = reinterpret_cast<IUnknown *>(
       rd->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_COMMAND_QUEUE,
                               RID(), 0));
-  UtilityFunctions::print("GDSpoutInput: command queue=", (uint64_t)command_queue);
   if (!command_queue) {
-    UtilityFunctions::printerr("GDSpoutInput: failed to get command queue");
     return false;
   }
 
@@ -127,13 +118,11 @@ bool GDSpoutInput::_create_receiver() {
   d3d12_device->AddRef();
 
   if (!_receiver->OpenDirectX12(d3d12_device, &command_queue)) {
-    UtilityFunctions::printerr("GDSpoutInput: OpenDirectX12 failed");
     delete _receiver;
     _receiver = nullptr;
     return false;
   }
 
-  UtilityFunctions::print("GDSpoutInput: receiver created successfully");
   return true;
 }
 
@@ -174,24 +163,17 @@ bool GDSpoutInput::_create_texture(uint32_t p_width, uint32_t p_height) {
 
   _rd_texture = rd->texture_create(fmt, view);
   if (!_rd_texture.is_valid()) {
-    UtilityFunctions::printerr("GDSpoutInput: texture_create failed");
     return false;
   }
 
-  // Get the native ID3D12Resource* — borrowed from Godot, do not Release
   auto d3d12_texture = reinterpret_cast<ID3D12Resource *>(
       rd->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_TEXTURE,
                               _rd_texture, 0));
   if (!d3d12_texture) {
-    UtilityFunctions::printerr("GDSpoutInput: failed to get D3D12 texture handle");
     rd->free_rid(_rd_texture);
     _rd_texture = RID();
     return false;
   }
-
-  UtilityFunctions::print("GDSpoutInput: receive texture created ",
-                          p_width, "x", p_height,
-                          " d3d12=", (uint64_t)d3d12_texture);
 
   if (_texture.is_valid()) {
     _texture->set_texture_rd_rid(_rd_texture);
@@ -238,9 +220,6 @@ void GDSpoutInput::_receive_texture() {
     if (_receiver->IsUpdated()) {
       auto width = _receiver->GetSenderWidth();
       auto height = _receiver->GetSenderHeight();
-      UtilityFunctions::print("GDSpoutInput: sender updated '",
-                            String(_receiver->GetSenderName()),
-                            "' ", width, "x", height);
       _create_texture(width, height);
     }
   } else {
