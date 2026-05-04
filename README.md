@@ -14,3 +14,6 @@ cmake --build . --config Release --target install
 
 # License
 MIT License
+
+# Known issues
+- Dynamic switching to viewport texture results in an empty texture.
