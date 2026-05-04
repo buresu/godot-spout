@@ -18,6 +18,7 @@ public:
   void set_channel_name(String p_name);
 
   Ref<Texture2DRD> get_texture() const;
+  void set_texture(Ref<Texture2DRD> p_texture);
 
 protected:
   static void _bind_methods();
@@ -25,11 +26,12 @@ protected:
   bool _create_receiver();
   void _release_receiver();
   void _receive_texture();
+  bool _recreate_receive_texture(uint32_t p_width, uint32_t p_height);
 
 private:
   // DX12 Spout
   spoutDX12 *_receiver = nullptr;
-  ID3D12Resource *_d3d12_texture = nullptr;
+  ID3D12Resource *_d3d12_texture = nullptr; // borrowed from Godot — do not Release
 
   // Godot texture
   Ref<Texture2DRD> _texture;

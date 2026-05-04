@@ -1,8 +1,7 @@
 [gd_scene format=3 uid="uid://b4caixiriwi0t"]
 
 [ext_resource type="Script" uid="uid://bapcio0qd5pp" path="res://scripts/input_demo.gd" id="1_rcvr"]
-
-[sub_resource type="Texture2DRD" id="Texture2DRD_5d8sp"]
+[ext_resource type="Texture2D" uid="uid://dkui11u7kffbl" path="res://textures/texture_2drd.tres" id="2_11fwh"]
 
 [node name="ReceiverDemo" type="Control" unique_id=600000001]
 layout_mode = 3
@@ -15,7 +14,7 @@ script = ExtResource("1_rcvr")
 
 [node name="GDSpoutInput" type="GDSpoutInput" parent="." unique_id=600000002]
 channel_name = "OBS_Spout"
-texture = SubResource("Texture2DRD_5d8sp")
+texture = ExtResource("2_11fwh")
 
 [node name="TextureRect" type="TextureRect" parent="." unique_id=600000003]
 layout_mode = 1
@@ -24,6 +23,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+texture = ExtResource("2_11fwh")
 expand_mode = 3
 stretch_mode = 6
 
@@ -40,6 +40,6 @@ offset_bottom = 32.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_font_sizes/font_size = 32
-text = "Waiting for sender..."
+text = "Waiting for input..."
 horizontal_alignment = 1
 vertical_alignment = 1
