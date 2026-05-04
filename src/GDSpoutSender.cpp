@@ -77,8 +77,8 @@ bool GDSpoutSender::_create_sender() {
 
   // Get the main RenderingDevice
   auto rs = RenderingServer::get_singleton();
-  _rd = rs->get_rendering_device();
-  if (!_rd) {
+  auto rd = rs->get_rendering_device();
+  if (!rd) {
     return false;
   }
 
@@ -86,25 +86,22 @@ bool GDSpoutSender::_create_sender() {
   String driver = rs->get_current_rendering_driver_name();
   if (driver != "d3d12") {
     ERR_PRINT("GDSpoutSender: Only Direct3D 12 rendering is supported. Current driver: " + driver);
-    _rd = nullptr;
     return false;
   }
 
   // Get the DX12 device (ID3D12Device*)
   auto d3d12_device = reinterpret_cast<ID3D12Device *>(
-      _rd->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_LOGICAL_DEVICE,
+      rd->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_LOGICAL_DEVICE,
                                RID(), 0));
   if (!d3d12_device) {
-    _rd = nullptr;
     return false;
   }
 
   // Get the DX12 graphics command queue (ID3D12CommandQueue*)
   auto command_queue = reinterpret_cast<IUnknown *>(
-      _rd->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_COMMAND_QUEUE,
+      rd->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_COMMAND_QUEUE,
                                RID(), 0));
   if (!command_queue) {
-    _rd = nullptr;
     return false;
   }
 
@@ -123,7 +120,6 @@ bool GDSpoutSender::_create_sender() {
   if (!_sender->OpenDirectX12(d3d12_device, &command_queue)) {
     delete _sender;
     _sender = nullptr;
-    _rd = nullptr;
     return false;
   }
 
@@ -136,7 +132,7 @@ bool GDSpoutSender::_create_sender() {
 
   // Get the native ID3D12Resource* for the texture
   _d3d12_texture = reinterpret_cast<ID3D12Resource *>(
-      _rd->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_TEXTURE,
+      rd->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_TEXTURE,
                                rd_tex_rid, 0));
   if (!_d3d12_texture) {
     _release_sender();
@@ -147,7 +143,7 @@ bool GDSpoutSender::_create_sender() {
   // ViewportTexture / render target -> RENDER_TARGET
   // Regular sampled texture         -> PIXEL_SHADER_RESOURCE
   D3D12_RESOURCE_STATES in_state = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-  auto fmt = _rd->texture_get_format(rd_tex_rid);
+  auto fmt = rd->texture_get_format(rd_tex_rid);
   if (fmt.is_valid()) {
     auto usage = fmt->get_usage_bits();
     if (usage & RenderingDevice::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) {
@@ -181,8 +177,6 @@ void GDSpoutSender::_release_sender() {
     delete _sender; // ~spoutDX12 releases D3D11on12 internals + our AddRef'd device ref
     _sender = nullptr;
   }
-
-  _rd = nullptr;
 }
 
 
@@ -205,9 +199,10 @@ void GDSpoutSender::_send_texture() {
   // Recreate if the underlying D3D12 resource changed (e.g. ViewportTexture resize)
   // or if texture dimensions changed
   auto rs = RenderingServer::get_singleton();
+  auto rd = rs->get_rendering_device();
   auto rd_tex_rid = rs->texture_get_rd_texture(_texture->get_rid(), false);
   auto current_d3d12 = rd_tex_rid.is_valid()
-      ? reinterpret_cast<ID3D12Resource *>(_rd->get_driver_resource(
+      ? reinterpret_cast<ID3D12Resource *>(rd->get_driver_resource(
             RenderingDevice::DRIVER_RESOURCE_TEXTURE, rd_tex_rid, 0))
       : nullptr;
 

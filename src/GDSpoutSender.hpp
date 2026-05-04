@@ -36,9 +36,6 @@ private:
   ID3D11Resource *_wrapped_resource = nullptr;
   ID3D12Resource *_d3d12_texture = nullptr;
 
-  // Rendering device (borrowed from Godot, do not delete)
-  RenderingDevice *_rd = nullptr;
-
   // Properties
   String _channel_name = "godot-spout";
   Ref<Texture2D> _texture;
