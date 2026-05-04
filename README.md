@@ -1,7 +1,6 @@
 # godot-spout
 [WIP] Godot Spout Plugin via GDExtension  
 The current functionality supports transmission in Forward+ rendering (D3D12) mode only.  
-Input implementation is currently in progress.  
 
 # Build
 ```
@@ -16,4 +15,4 @@ cmake --build . --config Release --target install
 MIT License
 
 # Known issues
-- Dynamic switching to viewport texture results in an empty texture.
+- Dynamic switching to output viewport texture results in an empty texture.
