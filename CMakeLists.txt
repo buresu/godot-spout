@@ -15,10 +15,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /DTYPED_METHOD_BIND")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /DTYPED_METHOD_BIND")
 
-if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-    set(BITS "64")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64")
+    set(ARCH "arm64")
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(ARCH "x86_64")
 else()
-    set(BITS "32")
+    set(ARCH "x86_32")
 endif()
 
 # Required by Spout2's sub-CMakeLists for output directory settings
@@ -34,7 +36,7 @@ add_library(GodotSpout SHARED ${SOURCES})
 
 set_target_properties(GodotSpout PROPERTIES
     PREFIX "lib"
-    OUTPUT_NAME "godot-spout.windows.$<IF:$<CONFIG:Debug>,debug,release>.x86_${BITS}"
+    OUTPUT_NAME "godot-spout.windows.$<IF:$<CONFIG:Debug>,debug,release>.${ARCH}"
 )
 
 target_include_directories(GodotSpout PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
@@ -47,12 +49,12 @@ target_include_directories(GodotSpout PRIVATE ${PROJECT_SOURCE_DIR}/lib/Spout2/S
 target_include_directories(GodotSpout PRIVATE ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX/SpoutDX12)
 
 target_link_directories(GodotSpout PRIVATE ${PROJECT_SOURCE_DIR}/lib/godot-cpp/bin)
-target_link_libraries(GodotSpout SpoutDX12_static optimized libgodot-cpp.windows.template_release.x86_${BITS} debug libgodot-cpp.windows.template_debug.x86_${BITS})
+target_link_libraries(GodotSpout SpoutDX12_static optimized libgodot-cpp.windows.template_release.${ARCH} debug libgodot-cpp.windows.template_debug.${ARCH})
 
 add_custom_command(
     TARGET GodotSpout
     PRE_BUILD
-    COMMAND scons platform=windows target=$<IF:$<CONFIG:Debug>,template_debug,template_release> bits=${BITS}
+    COMMAND scons platform=windows target=$<IF:$<CONFIG:Debug>,template_debug,template_release> arch=${ARCH}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/lib/godot-cpp
 )
 
