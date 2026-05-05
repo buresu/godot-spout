@@ -33,8 +33,8 @@ file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h" "src/*.hpp")
 add_library(GodotSpout SHARED ${SOURCES})
 
 set_target_properties(GodotSpout PROPERTIES
-    OUTPUT_NAME "SpoutPlugin"
-    DEBUG_POSTFIX d
+    PREFIX "lib"
+    OUTPUT_NAME "godot-spout.windows.$<IF:$<CONFIG:Debug>,debug,release>.x86_${BITS}"
 )
 
 target_include_directories(GodotSpout PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
@@ -52,7 +52,7 @@ target_link_libraries(GodotSpout SpoutDX12_static optimized libgodot-cpp.windows
 add_custom_command(
     TARGET GodotSpout
     PRE_BUILD
-    COMMAND scons platform=windows target=$<$<CONFIG:Debug>:template_debug>$<$<CONFIG:Release>:template_release> bits=${BITS}
+    COMMAND scons platform=windows target=$<IF:$<CONFIG:Debug>,template_debug,template_release> bits=${BITS}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/lib/godot-cpp
 )
 
