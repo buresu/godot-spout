@@ -4,6 +4,7 @@
 
 #include "GDSpoutInput.hpp"
 #include "GDSpoutOutput.hpp"
+#include "GDSpoutTexture.hpp"
 
 void initialize_spout_module(ModuleInitializationLevel p_level) {
 
@@ -13,6 +14,7 @@ void initialize_spout_module(ModuleInitializationLevel p_level) {
 
   ClassDB::register_class<GDSpoutOutput>();
   ClassDB::register_class<GDSpoutInput>();
+  ClassDB::register_class<GDSpoutTexture>();
 }
 
 void uninitialize_spout_module(ModuleInitializationLevel p_level) {
