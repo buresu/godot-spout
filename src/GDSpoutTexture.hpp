@@ -3,7 +3,6 @@
 #include <godot_cpp/classes/texture2drd.hpp>
 
 class spoutDX12;
-struct ID3D12Resource;
 
 namespace godot {
 
