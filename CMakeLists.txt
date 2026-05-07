@@ -25,6 +25,7 @@ endif()
 add_subdirectory("${PROJECT_SOURCE_DIR}/lib/godot-cpp")
 
 # Spout2
+set(SPOUT_NO_GLOBAL_WARNING ON CACHE BOOL "" FORCE)
 set(SPOUT_BUILD_CMT OFF CACHE BOOL "" FORCE)
 set(SPOUT_BUILD_SPOUTDX ON CACHE BOOL "" FORCE)
 if(ARCH STREQUAL "arm64")
@@ -52,6 +53,12 @@ target_include_directories(GodotSpout PRIVATE
     ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX
     ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX/SpoutDX12
 )
+if(ARCH STREQUAL "arm64")
+    target_compile_options(GodotSpout PRIVATE /Zc:preprocessor)
+    target_include_directories(GodotSpout PRIVATE
+        ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/sse2neon
+    )
+endif()
 
 target_link_libraries(GodotSpout PRIVATE godot-cpp SpoutDX12_static)
 
