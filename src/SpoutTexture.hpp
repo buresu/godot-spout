@@ -6,11 +6,11 @@ class spoutDX12;
 
 namespace godot {
 
-class GDSpoutTexture : public Texture2DRD {
-  GDCLASS(GDSpoutTexture, Texture2DRD)
+class SpoutTexture : public Texture2DRD {
+  GDCLASS(SpoutTexture, Texture2DRD)
 public:
-  GDSpoutTexture();
-  virtual ~GDSpoutTexture();
+  SpoutTexture();
+  virtual ~SpoutTexture();
 
   String get_channel_name() const;
   void set_channel_name(String p_name);

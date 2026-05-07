@@ -12,7 +12,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_rcvr")
 
-[node name="GDSpoutInput" type="GDSpoutInput" parent="." unique_id=600000002]
+[node name="SpoutInput" type="SpoutInput" parent="." unique_id=600000002]
 texture = ExtResource("2_11fwh")
 
 [node name="TextureRect" type="TextureRect" parent="." unique_id=600000003]

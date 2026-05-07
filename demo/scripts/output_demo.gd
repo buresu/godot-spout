@@ -1,6 +1,6 @@
 extends Control
 
-@onready var spout_output: GDSpoutOutput = $GDSpoutOutput
+@onready var spout_output: SpoutOutput = $SpoutOutput
 @onready var color_rect: ColorRect = $SubViewportContainer/SubViewport/ColorRect
 @onready var button_viewport: Button = $ButtonBar/ButtonViewport
 @onready var button_icon: Button = $ButtonBar/ButtonIcon

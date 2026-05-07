@@ -7,11 +7,11 @@ class spoutDX12;
 
 namespace godot {
 
-class GDSpoutInput : public Node {
-  GDCLASS(GDSpoutInput, Node)
+class SpoutInput : public Node {
+  GDCLASS(SpoutInput, Node)
 public:
-  GDSpoutInput();
-  virtual ~GDSpoutInput();
+  SpoutInput();
+  virtual ~SpoutInput();
 
   String get_channel_name() const;
   void set_channel_name(String p_name);

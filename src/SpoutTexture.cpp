@@ -1,4 +1,4 @@
-#include "GDSpoutTexture.hpp"
+#include "SpoutTexture.hpp"
 
 #include <godot_cpp/classes/rd_texture_format.hpp>
 #include <godot_cpp/classes/rd_texture_view.hpp>
@@ -12,27 +12,27 @@
 
 using namespace godot;
 
-void GDSpoutTexture::_bind_methods() {
+void SpoutTexture::_bind_methods() {
 
   // Bind methods
   ClassDB::bind_method(D_METHOD("_receive_texture"),
-                       &GDSpoutTexture::_receive_texture);
+                       &SpoutTexture::_receive_texture);
   ClassDB::bind_method(D_METHOD("get_channel_name"),
-                       &GDSpoutTexture::get_channel_name);
+                       &SpoutTexture::get_channel_name);
   ClassDB::bind_method(D_METHOD("set_channel_name", "name"),
-                       &GDSpoutTexture::set_channel_name);
+                       &SpoutTexture::set_channel_name);
 
   // Add properties
-  ClassDB::add_property("GDSpoutTexture", {Variant::STRING, "channel_name"},
+  ClassDB::add_property("SpoutTexture", {Variant::STRING, "channel_name"},
                         "set_channel_name", "get_channel_name");
 }
 
-GDSpoutTexture::GDSpoutTexture() : Texture2DRD() {
+SpoutTexture::SpoutTexture() : Texture2DRD() {
   RenderingServer::get_singleton()->connect("frame_pre_draw",
                                             {this, "_receive_texture"});
 }
 
-GDSpoutTexture::~GDSpoutTexture() {
+SpoutTexture::~SpoutTexture() {
 
   RenderingServer::get_singleton()->disconnect("frame_pre_draw",
                                                {this, "_receive_texture"});
@@ -41,16 +41,16 @@ GDSpoutTexture::~GDSpoutTexture() {
   _release_texture();
 }
 
-String GDSpoutTexture::get_channel_name() const { return _channel_name; }
+String SpoutTexture::get_channel_name() const { return _channel_name; }
 
-void GDSpoutTexture::set_channel_name(String p_name) {
+void SpoutTexture::set_channel_name(String p_name) {
   _channel_name = p_name;
   _release_receiver();
 }
 
-bool GDSpoutTexture::_is_initialized() const { return _receiver != nullptr; }
+bool SpoutTexture::_is_initialized() const { return _receiver != nullptr; }
 
-bool GDSpoutTexture::_create_receiver() {
+bool SpoutTexture::_create_receiver() {
 
   _release_receiver();
 
@@ -62,7 +62,7 @@ bool GDSpoutTexture::_create_receiver() {
 
   String driver = rs->get_current_rendering_driver_name();
   if (driver != "d3d12") {
-    ERR_PRINT("GDSpoutTexture: Only Direct3D 12 rendering is supported. "
+    ERR_PRINT("SpoutTexture: Only Direct3D 12 rendering is supported. "
               "Current driver: " +
               driver);
     return false;
@@ -102,7 +102,7 @@ bool GDSpoutTexture::_create_receiver() {
   return true;
 }
 
-void GDSpoutTexture::_release_receiver() {
+void SpoutTexture::_release_receiver() {
 
   if (_receiver) {
     _receiver->CloseDirectX12();
@@ -112,7 +112,7 @@ void GDSpoutTexture::_release_receiver() {
   }
 }
 
-bool GDSpoutTexture::_create_texture(uint32_t p_width, uint32_t p_height) {
+bool SpoutTexture::_create_texture(uint32_t p_width, uint32_t p_height) {
 
   auto rd = RenderingServer::get_singleton()->get_rendering_device();
   if (!rd) {
@@ -151,13 +151,13 @@ bool GDSpoutTexture::_create_texture(uint32_t p_width, uint32_t p_height) {
     return false;
   }
 
-  // Apply RID directly to self since GDSpoutTexture IS the texture
+  // Apply RID directly to self since SpoutTexture IS the texture
   set_texture_rd_rid(_rd_texture);
 
   return true;
 }
 
-void GDSpoutTexture::_release_texture() {
+void SpoutTexture::_release_texture() {
 
   if (_rd_texture.is_valid()) {
     set_texture_rd_rid(RID());
@@ -169,7 +169,7 @@ void GDSpoutTexture::_release_texture() {
   }
 }
 
-void GDSpoutTexture::_receive_texture() {
+void SpoutTexture::_receive_texture() {
 
   if (!_is_initialized()) {
     if (!_create_receiver()) {

@@ -1,6 +1,6 @@
 extends Control
 
-@onready var spout_input: GDSpoutInput = $GDSpoutInput
+@onready var spout_input: SpoutInput = $SpoutInput
 @onready var texture_rect: TextureRect = $TextureRect
 @onready var label: Label = $Label
 

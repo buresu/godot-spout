@@ -1,4 +1,4 @@
-#include "GDSpoutInput.hpp"
+#include "SpoutInput.hpp"
 
 #include <godot_cpp/classes/rd_texture_format.hpp>
 #include <godot_cpp/classes/rd_texture_view.hpp>
@@ -12,34 +12,34 @@
 
 using namespace godot;
 
-void GDSpoutInput::_bind_methods() {
+void SpoutInput::_bind_methods() {
 
   // Bind methods
   ClassDB::bind_method(D_METHOD("_receive_texture"),
-                       &GDSpoutInput::_receive_texture);
+                       &SpoutInput::_receive_texture);
   ClassDB::bind_method(D_METHOD("get_channel_name"),
-                       &GDSpoutInput::get_channel_name);
+                       &SpoutInput::get_channel_name);
   ClassDB::bind_method(D_METHOD("set_channel_name", "name"),
-                       &GDSpoutInput::set_channel_name);
-  ClassDB::bind_method(D_METHOD("get_texture"), &GDSpoutInput::get_texture);
+                       &SpoutInput::set_channel_name);
+  ClassDB::bind_method(D_METHOD("get_texture"), &SpoutInput::get_texture);
   ClassDB::bind_method(D_METHOD("set_texture", "p_texture"),
-                       &GDSpoutInput::set_texture);
+                       &SpoutInput::set_texture);
 
   // Add properties
-  ClassDB::add_property("GDSpoutInput", {Variant::STRING, "channel_name"},
+  ClassDB::add_property("SpoutInput", {Variant::STRING, "channel_name"},
                         "set_channel_name", "get_channel_name");
   ClassDB::add_property(
-      "GDSpoutInput",
+      "SpoutInput",
       {Variant::OBJECT, "texture", PROPERTY_HINT_RESOURCE_TYPE, "Texture2DRD"},
       "set_texture", "get_texture");
 }
 
-GDSpoutInput::GDSpoutInput() : Node() {
+SpoutInput::SpoutInput() : Node() {
   RenderingServer::get_singleton()->connect("frame_pre_draw",
                                             {this, "_receive_texture"});
 }
 
-GDSpoutInput::~GDSpoutInput() {
+SpoutInput::~SpoutInput() {
 
   RenderingServer::get_singleton()->disconnect("frame_pre_draw",
                                                {this, "_receive_texture"});
@@ -48,16 +48,16 @@ GDSpoutInput::~GDSpoutInput() {
   _release_texture();
 }
 
-String GDSpoutInput::get_channel_name() const { return _channel_name; }
+String SpoutInput::get_channel_name() const { return _channel_name; }
 
-void GDSpoutInput::set_channel_name(String p_name) {
+void SpoutInput::set_channel_name(String p_name) {
   _channel_name = p_name;
   _release_receiver();
 }
 
-Ref<Texture2DRD> GDSpoutInput::get_texture() const { return _texture; }
+Ref<Texture2DRD> SpoutInput::get_texture() const { return _texture; }
 
-void GDSpoutInput::set_texture(Ref<Texture2DRD> p_texture) {
+void SpoutInput::set_texture(Ref<Texture2DRD> p_texture) {
   if (_texture == p_texture) {
     return;
   }
@@ -72,9 +72,9 @@ void GDSpoutInput::set_texture(Ref<Texture2DRD> p_texture) {
   }
 }
 
-bool GDSpoutInput::_is_initialized() const { return _receiver != nullptr; }
+bool SpoutInput::_is_initialized() const { return _receiver != nullptr; }
 
-bool GDSpoutInput::_create_receiver() {
+bool SpoutInput::_create_receiver() {
 
   _release_receiver();
 
@@ -86,7 +86,7 @@ bool GDSpoutInput::_create_receiver() {
 
   String driver = rs->get_current_rendering_driver_name();
   if (driver != "d3d12") {
-    ERR_PRINT("GDSpoutInput: Only Direct3D 12 rendering is supported. "
+    ERR_PRINT("SpoutInput: Only Direct3D 12 rendering is supported. "
               "Current driver: " +
               driver);
     return false;
@@ -126,7 +126,7 @@ bool GDSpoutInput::_create_receiver() {
   return true;
 }
 
-void GDSpoutInput::_release_receiver() {
+void SpoutInput::_release_receiver() {
 
   if (_receiver) {
     _receiver->CloseDirectX12();
@@ -136,7 +136,7 @@ void GDSpoutInput::_release_receiver() {
   }
 }
 
-bool GDSpoutInput::_create_texture(uint32_t p_width, uint32_t p_height) {
+bool SpoutInput::_create_texture(uint32_t p_width, uint32_t p_height) {
 
   auto rd = RenderingServer::get_singleton()->get_rendering_device();
   if (!rd) {
@@ -182,7 +182,7 @@ bool GDSpoutInput::_create_texture(uint32_t p_width, uint32_t p_height) {
   return true;
 }
 
-void GDSpoutInput::_release_texture() {
+void SpoutInput::_release_texture() {
 
   if (_rd_texture.is_valid()) {
     if (_texture.is_valid()) {
@@ -196,7 +196,7 @@ void GDSpoutInput::_release_texture() {
   }
 }
 
-void GDSpoutInput::_receive_texture() {
+void SpoutInput::_receive_texture() {
 
   if (_texture.is_null()) {
     return;

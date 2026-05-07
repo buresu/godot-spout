@@ -4,7 +4,7 @@ extends Control
 @onready var label: Label = $Label
 
 func _process(_delta: float) -> void:
-	var tex := texture_rect.texture as GDSpoutTexture
+	var tex := texture_rect.texture as SpoutTexture
 	if tex and tex.get_width() > 0:
 		label.text = "Receiving: %s (%dx%d)" % [
 			tex.channel_name if not tex.channel_name.is_empty() else "auto",

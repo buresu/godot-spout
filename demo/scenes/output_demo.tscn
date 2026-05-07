@@ -12,7 +12,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_sndr")
 
-[node name="GDSpoutOutput" type="GDSpoutOutput" parent="." unique_id=852203754]
+[node name="SpoutOutput" type="SpoutOutput" parent="." unique_id=852203754]
 texture = ExtResource("3_vptex")
 
 [node name="SubViewportContainer" type="SubViewportContainer" parent="." unique_id=1795130122]
