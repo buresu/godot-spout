@@ -1,21 +1,19 @@
 cmake_minimum_required(VERSION 3.15)
 
-# Must be set before project() to affect all subdirectory project() calls as well
-cmake_policy(SET CMP0091 NEW)
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded" CACHE STRING "" FORCE)
-
 project(godot-spout VERSION 1.0.0)
 
-set(CMAKE_CONFIGURATION_TYPES "Debug;Release")
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type" FORCE)
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /DTYPED_METHOD_BIND")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /DTYPED_METHOD_BIND")
 
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64")
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+if(CMAKE_GENERATOR_PLATFORM MATCHES "arm64|aarch64|ARM64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64|ARM64")
     set(ARCH "arm64")
 elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(ARCH "x86_64")
@@ -23,39 +21,38 @@ else()
     set(ARCH "x86_32")
 endif()
 
-# Required by Spout2's sub-CMakeLists for output directory settings
-set(SPOUT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
+# godot-cpp
+add_subdirectory("${PROJECT_SOURCE_DIR}/lib/godot-cpp")
 
-add_subdirectory(${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutGL EXCLUDE_FROM_ALL)
-add_subdirectory(${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX EXCLUDE_FROM_ALL)
-add_subdirectory(${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX/SpoutDX12 EXCLUDE_FROM_ALL)
+# Spout2
+set(SPOUT_BUILD_CMT OFF CACHE BOOL "" FORCE)
+set(SPOUT_BUILD_SPOUTDX ON CACHE BOOL "" FORCE)
+if(ARCH STREQUAL "arm64")
+    set(SPOUT_BUILD_ARM ON CACHE BOOL "" FORCE)
+endif()
+add_subdirectory("${PROJECT_SOURCE_DIR}/lib/Spout2" EXCLUDE_FROM_ALL)
 
-file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h" "src/*.hpp")
+file(GLOB_RECURSE INCLUDES "src/*.hpp")
+file(GLOB_RECURSE SOURCES "src/*.cpp")
 
-add_library(GodotSpout SHARED ${SOURCES})
+add_library(GodotSpout SHARED ${SOURCES} ${INCLUDES})
 
 set_target_properties(GodotSpout PROPERTIES
     PREFIX "lib"
     OUTPUT_NAME "godot-spout.windows.$<IF:$<CONFIG:Debug>,debug,release>.${ARCH}"
 )
 
-target_include_directories(GodotSpout PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-target_include_directories(GodotSpout PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories(GodotSpout PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_include_directories(GodotSpout PRIVATE ${PROJECT_SOURCE_DIR}/lib/godot-cpp/gdextension)
-target_include_directories(GodotSpout PRIVATE ${PROJECT_SOURCE_DIR}/lib/godot-cpp/include)
-target_include_directories(GodotSpout PRIVATE ${PROJECT_SOURCE_DIR}/lib/godot-cpp/gen/include)
-target_include_directories(GodotSpout PRIVATE ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX)
-target_include_directories(GodotSpout PRIVATE ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX/SpoutDX12)
-
-target_link_directories(GodotSpout PRIVATE ${PROJECT_SOURCE_DIR}/lib/godot-cpp/bin)
-target_link_libraries(GodotSpout SpoutDX12_static optimized libgodot-cpp.windows.template_release.${ARCH} debug libgodot-cpp.windows.template_debug.${ARCH})
-
-add_custom_command(
-    TARGET GodotSpout
-    PRE_BUILD
-    COMMAND scons platform=windows target=$<IF:$<CONFIG:Debug>,template_debug,template_release> arch=${ARCH}
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/lib/godot-cpp
+target_include_directories(GodotSpout PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/lib/godot-cpp/gdextension
+    ${PROJECT_SOURCE_DIR}/lib/godot-cpp/include
+    ${PROJECT_SOURCE_DIR}/lib/godot-cpp/gen/include
+    ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX
+    ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX/SpoutDX12
 )
+
+target_link_libraries(GodotSpout PRIVATE godot-cpp SpoutDX12_static)
 
 install(TARGETS GodotSpout RUNTIME DESTINATION ${PROJECT_SOURCE_DIR}/demo/addons/godot-spout/bin)

@@ -25,14 +25,6 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Install SCons
-        run: pip install scons
-
       - name: Get godot-cpp commit hash
         id: godot-cpp-hash
         shell: bash
@@ -41,11 +33,11 @@ jobs:
       - name: Cache godot-cpp build
         uses: actions/cache@v4
         with:
-          path: lib/godot-cpp/bin
+          path: build/lib/godot-cpp
           key: godot-cpp-${{ steps.godot-cpp-hash.outputs.hash }}-${{ matrix.arch }}-${{ matrix.config }}
 
       - name: Configure CMake
-        run: cmake -B build -A ${{ matrix.cmake_arch }}
+        run: cmake -B build -A ${{ matrix.cmake_arch }} -DCMAKE_BUILD_TYPE=${{ matrix.config }}
 
       - name: Build
         run: cmake --build build --config ${{ matrix.config }}
