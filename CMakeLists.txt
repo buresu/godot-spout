@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(godot-spout VERSION 1.1.0)
+project(godot-spout VERSION 1.2.0)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type" FORCE)
