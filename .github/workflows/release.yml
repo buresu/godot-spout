@@ -27,6 +27,11 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Set up Scoop
+        uses: MinoruSekine/setup-scoop@v4
+        with:
+          apps: vulkan
+
       - name: Get godot-cpp commit hash
         id: godot-cpp-hash
         shell: bash
@@ -39,7 +44,12 @@ jobs:
           key: godot-cpp-${{ steps.godot-cpp-hash.outputs.hash }}-${{ matrix.arch }}-${{ matrix.config }}
 
       - name: Configure CMake
-        run: cmake -B build -A ${{ matrix.cmake_arch }} -DCMAKE_BUILD_TYPE=${{ matrix.config }}
+        run: >
+          cmake -B build
+          -A ${{ matrix.cmake_arch }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.config }}
+          -DGODOT_SPOUT_ENABLE_VULKAN=ON
+          -DGODOT_SPOUT_ENABLE_OPENGL=ON
 
       - name: Build
         run: cmake --build build --config ${{ matrix.config }}
