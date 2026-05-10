@@ -28,12 +28,21 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up Vulkan SDK
-        uses: humbletim/setup-vulkan-sdk@v1.2.1
+      - name: Set up Scoop
+        uses: MinoruSekine/setup-scoop@v4
         with:
-          vulkan-query-version: latest
-          vulkan-components: Vulkan-Headers, Vulkan-Loader
-          vulkan-use-cache: true
+          apps: vulkan
+
+      - name: Locate Vulkan SDK
+        id: vulkan-sdk
+        shell: pwsh
+        run: |
+          $vulkanRoot = (scoop prefix vulkan).Trim()
+          $vulkanInclude = Join-Path $vulkanRoot "Include"
+          $vulkanLibrary = Join-Path $vulkanRoot "Lib/vulkan-1.lib"
+          "VULKAN_SDK=$vulkanRoot" >> $env:GITHUB_ENV
+          "Vulkan_INCLUDE_DIR=$vulkanInclude" >> $env:GITHUB_OUTPUT
+          "Vulkan_LIBRARY=$vulkanLibrary" >> $env:GITHUB_OUTPUT
 
       - name: Get godot-cpp commit hash
         id: godot-cpp-hash
@@ -44,18 +53,21 @@ jobs:
         uses: actions/cache@v5
         with:
           path: build
-          key: ci-build-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.config }}-${{ steps.godot-cpp-hash.outputs.hash }}-${{ hashFiles('CMakeLists.txt', 'src/**', 'lib/SpoutVulkan/**', 'lib/Spout2/**/CMakeLists.txt') }}
+          key: ci-build-scoop-vulkan-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.config }}-${{ steps.godot-cpp-hash.outputs.hash }}-${{ hashFiles('CMakeLists.txt', 'src/**', 'lib/SpoutVulkan/**', 'lib/Spout2/**/CMakeLists.txt') }}
           restore-keys: |
-            ci-build-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.config }}-${{ steps.godot-cpp-hash.outputs.hash }}-
-            ci-build-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.config }}-
+            ci-build-scoop-vulkan-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.config }}-${{ steps.godot-cpp-hash.outputs.hash }}-
+            ci-build-scoop-vulkan-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.config }}-
 
       - name: Configure CMake
-        run: >
-          cmake -B build
-          -A ${{ matrix.cmake_arch }}
-          -DCMAKE_BUILD_TYPE=${{ matrix.config }}
-          -DGODOT_SPOUT_ENABLE_VULKAN=ON
-          -DGODOT_SPOUT_ENABLE_OPENGL=ON
+        shell: pwsh
+        run: |
+          cmake -B build `
+            -A ${{ matrix.cmake_arch }} `
+            -DCMAKE_BUILD_TYPE=${{ matrix.config }} `
+            -DGODOT_SPOUT_ENABLE_VULKAN=ON `
+            -DGODOT_SPOUT_ENABLE_OPENGL=ON `
+            -DVulkan_INCLUDE_DIR="${{ steps.vulkan-sdk.outputs.Vulkan_INCLUDE_DIR }}" `
+            -DVulkan_LIBRARY="${{ steps.vulkan-sdk.outputs.Vulkan_LIBRARY }}"
 
       - name: Build
         run: cmake --build build --config ${{ matrix.config }} --target GodotSpout
