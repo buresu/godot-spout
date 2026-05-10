@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     name: Build (${{ matrix.arch }}, ${{ matrix.config }})
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         arch: [x86_64, arm64]
@@ -16,8 +16,10 @@ jobs:
         include:
           - arch: x86_64
             cmake_arch: x64
+            runner: windows-latest
           - arch: arm64
             cmake_arch: ARM64
+            runner: windows-11-arm
 
     steps:
       - name: Checkout
