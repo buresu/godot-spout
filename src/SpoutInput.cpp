@@ -83,12 +83,12 @@ bool SpoutInput::_create_receiver() {
 
   auto rs = RenderingServer::get_singleton();
   auto rd = rs->get_rendering_device();
-  if (!rd) {
+  auto driver = rs->get_current_rendering_driver_name();
+  if (driver != "opengl3" && !rd) {
     return false;
   }
 
-  _backend =
-      spout_backend_create(rs->get_current_rendering_driver_name(), "SpoutInput");
+  _backend = spout_backend_create(driver, "SpoutInput");
   if (!_backend || !_backend->initialize(rd)) {
     _release_receiver();
     return false;

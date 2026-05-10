@@ -14,6 +14,7 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(GODOT_SPOUT_ENABLE_VULKAN "Enable Spout Vulkan backend" OFF)
+option(GODOT_SPOUT_ENABLE_OPENGL "Enable Spout OpenGL backend" OFF)
 
 if(CMAKE_GENERATOR_PLATFORM MATCHES "arm64|aarch64|ARM64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64|ARM64")
     set(ARCH "arm64")
@@ -82,6 +83,11 @@ target_include_directories(GodotSpout PRIVATE
     ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX
     ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX/SpoutDX12
 )
+if(GODOT_SPOUT_ENABLE_OPENGL)
+    target_include_directories(GodotSpout PRIVATE
+        ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutGL
+    )
+endif()
 if(ARCH STREQUAL "arm64")
     target_compile_options(GodotSpout PRIVATE /Zc:preprocessor)
     target_include_directories(GodotSpout PRIVATE
@@ -90,6 +96,11 @@ if(ARCH STREQUAL "arm64")
 endif()
 
 target_link_libraries(GodotSpout PRIVATE godot-cpp SpoutDX12_static)
+
+if(GODOT_SPOUT_ENABLE_OPENGL)
+    target_compile_definitions(GodotSpout PRIVATE GODOT_SPOUT_ENABLE_OPENGL)
+    target_link_libraries(GodotSpout PRIVATE Spout_static)
+endif()
 
 if(GODOT_SPOUT_ENABLE_VULKAN)
     target_compile_definitions(GodotSpout PRIVATE GODOT_SPOUT_ENABLE_VULKAN)

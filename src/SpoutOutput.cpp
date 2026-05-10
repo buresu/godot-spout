@@ -76,18 +76,20 @@ bool SpoutOutput::_create_sender() {
 
   _release_sender();
 
-  // Get the main RenderingDevice
   auto rs = RenderingServer::get_singleton();
-  auto rd = rs->get_rendering_device();
-  if (!rd) {
-    return false;
-  }
-
   String driver = rs->get_current_rendering_driver_name();
+  auto rd = rs->get_rendering_device();
 
-  // Get the RenderingDevice RID for the texture
-  auto rd_tex_rid = rs->texture_get_rd_texture(_texture->get_rid(), false);
-  if (!rd_tex_rid.is_valid()) {
+  RID backend_texture;
+  if (driver == "opengl3") {
+    backend_texture = _texture->get_rid();
+  } else {
+    if (!rd) {
+      return false;
+    }
+    backend_texture = rs->texture_get_rd_texture(_texture->get_rid(), false);
+  }
+  if (!backend_texture.is_valid()) {
     return false;
   }
 
@@ -97,7 +99,7 @@ bool SpoutOutput::_create_sender() {
     return false;
   }
 
-  _backend_texture = rd_tex_rid;
+  _backend_texture = backend_texture;
   return true;
 }
 
@@ -129,9 +131,13 @@ void SpoutOutput::_send_texture() {
   auto height = static_cast<unsigned int>(_texture->get_height());
 
   auto rs = RenderingServer::get_singleton();
-  auto rd_tex_rid = rs->texture_get_rd_texture(_texture->get_rid(), false);
+  auto driver = rs->get_current_rendering_driver_name();
+  RID current_texture = driver == "opengl3"
+                            ? _texture->get_rid()
+                            : rs->texture_get_rd_texture(_texture->get_rid(),
+                                                         false);
 
-  if (rd_tex_rid != _backend_texture) {
+  if (current_texture != _backend_texture) {
     if (!_create_sender()) {
       return;
     }

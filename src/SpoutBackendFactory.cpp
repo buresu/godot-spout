@@ -2,6 +2,10 @@
 
 #include "SpoutDX12Backend.hpp"
 
+#ifdef GODOT_SPOUT_ENABLE_OPENGL
+#include "SpoutOpenGLBackend.hpp"
+#endif
+
 #ifdef GODOT_SPOUT_ENABLE_VULKAN
 #include "SpoutVulkanBackend.hpp"
 #endif
@@ -15,6 +19,12 @@ SpoutBackend *godot::spout_backend_create(const String &p_driver_name,
   if (p_driver_name == "d3d12") {
     return new SpoutDX12Backend();
   }
+
+#ifdef GODOT_SPOUT_ENABLE_OPENGL
+  if (p_driver_name == "opengl3") {
+    return new SpoutOpenGLBackend();
+  }
+#endif
 
 #ifdef GODOT_SPOUT_ENABLE_VULKAN
   if (p_driver_name == "vulkan") {
