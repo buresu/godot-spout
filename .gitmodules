@@ -4,3 +4,6 @@
 [submodule "lib/Spout2"]
 	path = lib/Spout2
 	url = https://github.com/leadedge/Spout2.git
+[submodule "lib/SpoutVulkan"]
+	path = lib/SpoutVulkan
+	url = https://github.com/leadedge/SpoutVulkan.git

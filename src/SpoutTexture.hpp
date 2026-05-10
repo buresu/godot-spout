@@ -2,9 +2,9 @@
 
 #include <godot_cpp/classes/texture2drd.hpp>
 
-class spoutDX12;
-
 namespace godot {
+
+class SpoutBackend;
 
 class SpoutTexture : public Texture2DRD {
   GDCLASS(SpoutTexture, Texture2DRD)
@@ -25,8 +25,7 @@ protected:
   void _receive_texture();
 
 private:
-  // DX12 Spout
-  spoutDX12 *_receiver = nullptr;
+  SpoutBackend *_backend = nullptr;
 
   // Godot texture
   RID _rd_texture;

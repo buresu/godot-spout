@@ -11,6 +11,16 @@ cmake -G "Visual Studio 18 2026" ..
 cmake --build . --config [Debug|Release] --target install
 ```
 
+# Build with Vulkan
+```
+scoop install vulkan
+git clone --recursive https://github.com/buresu/godot-spout.git
+cd godot-spout
+mkdir build && cd build
+cmake -G "Visual Studio 18 2026" .. -DGODOT_SPOUT_ENABLE_VULKAN=ON
+cmake --build . --config [Debug|Release] --target install
+```
+
 # License
 MIT License
 

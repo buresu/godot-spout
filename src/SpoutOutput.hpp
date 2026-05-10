@@ -3,13 +3,9 @@
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
 
-class spoutDX12;
-struct ID3D11Resource;
-struct ID3D12Resource;
-
 namespace godot {
 
-class RenderingDevice;
+class SpoutBackend;
 
 class SpoutOutput : public Node {
   GDCLASS(SpoutOutput, Node)
@@ -31,10 +27,8 @@ protected:
   void _send_texture();
 
 private:
-  // DX12 Spout
-  spoutDX12 *_sender = nullptr;
-  ID3D11Resource *_wrapped_resource = nullptr;
-  ID3D12Resource *_d3d12_texture = nullptr;
+  SpoutBackend *_backend = nullptr;
+  RID _backend_texture;
 
   // Properties
   String _channel_name = "godot-spout";
