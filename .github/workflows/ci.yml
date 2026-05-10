@@ -14,13 +14,11 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        arch: [x86_64, x86_32, arm64]
+        arch: [x86_64, arm64]
         config: [Debug]
         include:
           - arch: x86_64
             cmake_arch: x64
-          - arch: x86_32
-            cmake_arch: Win32
           - arch: arm64
             cmake_arch: ARM64
 

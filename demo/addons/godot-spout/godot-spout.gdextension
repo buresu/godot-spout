@@ -6,8 +6,6 @@ reloadable = false
 
 [libraries]
 
-windows.debug.x86_32 = "res://addons/godot-spout/bin/libgodot-spout.windows.debug.x86_32.dll"
-windows.release.x86_32 = "res://addons/godot-spout/bin/libgodot-spout.windows.release.x86_32.dll"
 windows.debug.x86_64 = "res://addons/godot-spout/bin/libgodot-spout.windows.debug.x86_64.dll"
 windows.release.x86_64 = "res://addons/godot-spout/bin/libgodot-spout.windows.release.x86_64.dll"
 windows.debug.arm64 = "res://addons/godot-spout/bin/libgodot-spout.windows.debug.arm64.dll"
