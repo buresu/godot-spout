@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build (${{ matrix.config }}, all options)
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        config: [Debug, Release]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Set up Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.1
+        with:
+          vulkan-query-version: latest
+          vulkan-components: Vulkan-Headers, Vulkan-Loader
+          vulkan-use-cache: true
+
+      - name: Get godot-cpp commit hash
+        id: godot-cpp-hash
+        shell: bash
+        run: echo "hash=$(git -C lib/godot-cpp rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Cache CMake build
+        uses: actions/cache@v5
+        with:
+          path: build
+          key: ci-build-${{ runner.os }}-x86_64-${{ matrix.config }}-${{ steps.godot-cpp-hash.outputs.hash }}-${{ hashFiles('CMakeLists.txt', 'src/**', 'lib/SpoutVulkan/**', 'lib/Spout2/**/CMakeLists.txt') }}
+          restore-keys: |
+            ci-build-${{ runner.os }}-x86_64-${{ matrix.config }}-${{ steps.godot-cpp-hash.outputs.hash }}-
+            ci-build-${{ runner.os }}-x86_64-${{ matrix.config }}-
+
+      - name: Configure CMake
+        run: >
+          cmake -B build
+          -A x64
+          -DCMAKE_BUILD_TYPE=${{ matrix.config }}
+          -DGODOT_SPOUT_ENABLE_VULKAN=ON
+          -DGODOT_SPOUT_ENABLE_OPENGL=ON
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.config }} --target GodotSpout
