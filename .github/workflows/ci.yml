@@ -10,11 +10,19 @@ on:
 
 jobs:
   build:
-    name: Build (${{ matrix.config }}, all options)
+    name: Build (${{ matrix.arch }}, ${{ matrix.config }}, all options)
     runs-on: windows-latest
     strategy:
       matrix:
-        config: [Debug, Release]
+        arch: [x86_64, x86_32, arm64]
+        config: [Debug]
+        include:
+          - arch: x86_64
+            cmake_arch: x64
+          - arch: x86_32
+            cmake_arch: Win32
+          - arch: arm64
+            cmake_arch: ARM64
 
     steps:
       - name: Checkout
@@ -38,15 +46,15 @@ jobs:
         uses: actions/cache@v5
         with:
           path: build
-          key: ci-build-${{ runner.os }}-x86_64-${{ matrix.config }}-${{ steps.godot-cpp-hash.outputs.hash }}-${{ hashFiles('CMakeLists.txt', 'src/**', 'lib/SpoutVulkan/**', 'lib/Spout2/**/CMakeLists.txt') }}
+          key: ci-build-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.config }}-${{ steps.godot-cpp-hash.outputs.hash }}-${{ hashFiles('CMakeLists.txt', 'src/**', 'lib/SpoutVulkan/**', 'lib/Spout2/**/CMakeLists.txt') }}
           restore-keys: |
-            ci-build-${{ runner.os }}-x86_64-${{ matrix.config }}-${{ steps.godot-cpp-hash.outputs.hash }}-
-            ci-build-${{ runner.os }}-x86_64-${{ matrix.config }}-
+            ci-build-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.config }}-${{ steps.godot-cpp-hash.outputs.hash }}-
+            ci-build-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.config }}-
 
       - name: Configure CMake
         run: >
           cmake -B build
-          -A x64
+          -A ${{ matrix.cmake_arch }}
           -DCMAKE_BUILD_TYPE=${{ matrix.config }}
           -DGODOT_SPOUT_ENABLE_VULKAN=ON
           -DGODOT_SPOUT_ENABLE_OPENGL=ON
