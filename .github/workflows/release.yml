@@ -27,21 +27,12 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up Scoop
-        uses: MinoruSekine/setup-scoop@v4
+      - name: Set up Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.1
         with:
-          apps: vulkan
-
-      - name: Get godot-cpp commit hash
-        id: godot-cpp-hash
-        shell: bash
-        run: echo "hash=$(git -C lib/godot-cpp rev-parse HEAD)" >> $GITHUB_OUTPUT
-
-      - name: Cache godot-cpp build
-        uses: actions/cache@v5
-        with:
-          path: build/lib/godot-cpp
-          key: godot-cpp-${{ steps.godot-cpp-hash.outputs.hash }}-${{ matrix.arch }}-${{ matrix.config }}
+          vulkan-query-version: latest
+          vulkan-components: Vulkan-Headers, Vulkan-Loader
+          vulkan-use-cache: true
 
       - name: Configure CMake
         run: >
