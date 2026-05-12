@@ -509,3 +509,8 @@ FodyWeavers.xsd
 build/*
 !demo/addons/godot-spout/bin/
 !demo/addons/godot-spout/bin/.gitkeep
+demo/addons/godot-spout/README.md
+demo/addons/godot-spout/LICENSE
+demo/addons/godot-spout/licenses/*
+!demo/addons/godot-spout/licenses/
+!demo/addons/godot-spout/licenses/.gitkeep

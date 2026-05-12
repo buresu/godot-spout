@@ -73,6 +73,19 @@ jobs:
           name: dll-${{ matrix.arch }}-${{ matrix.config }}
           path: demo/addons/godot-spout/bin/${{ steps.dll-name.outputs.name }}
 
+      - name: Upload addon template
+        if: matrix.arch == 'x86_64' && matrix.config == 'Release'
+        uses: actions/upload-artifact@v7
+        with:
+          name: addon-template
+          path: |
+            demo/addons/godot-spout/godot-spout.gdextension
+            demo/addons/godot-spout/godot-spout.gdextension.uid
+            demo/addons/godot-spout/README.md
+            demo/addons/godot-spout/LICENSE
+            demo/addons/godot-spout/licenses/Spout2-LICENSE
+            demo/addons/godot-spout/licenses/SpoutVulkan-LICENSE
+
   release:
     name: Create Release
     needs: build
@@ -93,9 +106,14 @@ jobs:
       - name: Prepare release package
         run: |
           mkdir -p release/addons/godot-spout/bin
+          mkdir -p release/addons/godot-spout/licenses
           cp artifacts/*.dll release/addons/godot-spout/bin/
-          cp demo/addons/godot-spout/godot-spout.gdextension release/addons/godot-spout/
-          cp demo/addons/godot-spout/godot-spout.gdextension.uid release/addons/godot-spout/
+          cp artifacts/godot-spout.gdextension release/addons/godot-spout/
+          cp artifacts/godot-spout.gdextension.uid release/addons/godot-spout/
+          cp artifacts/README.md release/addons/godot-spout/
+          cp artifacts/LICENSE release/addons/godot-spout/
+          cp artifacts/licenses/Spout2-LICENSE release/addons/godot-spout/licenses/
+          cp artifacts/licenses/SpoutVulkan-LICENSE release/addons/godot-spout/licenses/
           cd release
           zip -r ../godot-spout-${{ github.ref_name }}.zip .
 

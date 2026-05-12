@@ -107,4 +107,19 @@ if(GODOT_SPOUT_ENABLE_VULKAN)
     target_link_libraries(GodotSpout PRIVATE SpoutVK_static)
 endif()
 
-install(TARGETS GodotSpout RUNTIME DESTINATION ${PROJECT_SOURCE_DIR}/demo/addons/godot-spout/bin)
+set(GODOT_SPOUT_ADDON_DIR "${PROJECT_SOURCE_DIR}/demo/addons/godot-spout")
+
+install(TARGETS GodotSpout RUNTIME DESTINATION "${GODOT_SPOUT_ADDON_DIR}/bin")
+install(FILES
+    "${PROJECT_SOURCE_DIR}/README.md"
+    "${PROJECT_SOURCE_DIR}/LICENSE"
+    DESTINATION "${GODOT_SPOUT_ADDON_DIR}"
+)
+install(FILES "${PROJECT_SOURCE_DIR}/lib/Spout2/LICENSE"
+    DESTINATION "${GODOT_SPOUT_ADDON_DIR}/licenses"
+    RENAME "Spout2-LICENSE"
+)
+install(FILES "${PROJECT_SOURCE_DIR}/lib/SpoutVulkan/LICENSE"
+    DESTINATION "${GODOT_SPOUT_ADDON_DIR}/licenses"
+    RENAME "SpoutVulkan-LICENSE"
+)
