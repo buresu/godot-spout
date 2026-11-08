@@ -3,7 +3,8 @@ extends SceneTree
 ## --role=recv on the same --channel. The sender fills its viewport with a
 ## colour whose red channel counts frames (mod 250, values 3..252). The
 ## receiver checks that what it gets keeps advancing: new frames arrive, no
-## garbage, no long freezes.
+## garbage, no long freezes, and the image is the right way up (white band on
+## top).
 ##
 ## Usage:
 ##   godot --path demo [--rendering-driver d3d12|vulkan] [--gpu-index N] \
@@ -52,6 +53,11 @@ func _initialize() -> void:
 		rect = ColorRect.new()
 		rect.size = size
 		vp.add_child(rect)
+		# White band on top: lets the receiver check the image isn't upside down.
+		var band := ColorRect.new()
+		band.color = Color.WHITE
+		band.size = Vector2(size.x, size.y / 10)
+		vp.add_child(band)
 		root.add_child(vp)
 		node = ClassDB.instantiate("SpoutOutput")
 		node.set("channel_name", channel)
@@ -89,6 +95,8 @@ func _sample() -> void:
 	var img := tex.get_image()
 	if img == null or img.is_empty():
 		return
+	var top := img.get_pixel(img.get_width() / 2, 1)
+	stats["top_is_white"] = top.r8 > 250 and top.g8 > 250 and top.b8 > 250
 	var c := img.get_pixel(img.get_width() / 2, img.get_height() / 2)
 	var r := c.r8
 	stats["received"] += 1
@@ -116,7 +124,7 @@ func _finish() -> bool:
 	if role == "recv":
 		stats["state_at_end"] = node.call("get_receiver_state")
 		stats["sender_size"] = str(node.call("get_sender_size"))
-		ok = stats["received"] > 0 and stats["garbage"] == 0 and stats["advanced"] > stats["received"] * 0.5
+		ok = stats["received"] > 0 and stats["garbage"] == 0 and stats["advanced"] > stats["received"] * 0.5 and stats.get("top_is_white", false)
 	else:
 		stats["frames_sent"] = node.call("get_frames_sent")
 		stats["frames_skipped"] = node.call("get_frames_skipped")
