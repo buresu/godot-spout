@@ -6,7 +6,10 @@ extends Control
 @onready var button_icon: Button = $ButtonBar/ButtonIcon
 
 var _icon_tex: Texture2D = preload("res://textures/icon.svg")
-var _viewport_tex: Texture2D = preload("res://textures/viewport_texture.tres")
+# Use the SubViewport's own texture. A preloaded ViewportTexture resource is
+# not set up for this scene (ViewportTexture is local-to-scene) and would only
+# ever show a 4x4 placeholder.
+@onready var _viewport_tex: Texture2D = $SubViewportContainer/SubViewport.get_texture()
 
 var _hue: float = 0.0
 
