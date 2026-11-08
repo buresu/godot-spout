@@ -1,10 +1,14 @@
 #include "SpoutCommon.hpp"
 
+#include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/os.hpp>
+#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include <cstdlib>
+#include <mutex>
+#include <vector>
 
 #include <SpoutUtils.h>
 
@@ -174,4 +178,62 @@ uint64_t godot::spout_ticks_usec() {
 
 uint64_t godot::spout_ticks_msec() {
   return Time::get_singleton()->get_ticks_msec();
+}
+
+namespace {
+
+struct DeferredRelease {
+  std::function<void()> release;
+  int64_t after_frame;
+};
+std::mutex s_deferred_lock;
+std::vector<DeferredRelease> s_deferred;
+bool s_pump_connected = false;
+
+void pump_deferred_releases() {
+  std::vector<std::function<void()>> due;
+  {
+    std::lock_guard<std::mutex> guard(s_deferred_lock);
+    const int64_t frame = Engine::get_singleton()->get_frames_drawn();
+    for (size_t i = 0; i < s_deferred.size();) {
+      if (frame > s_deferred[i].after_frame) {
+        due.push_back(std::move(s_deferred[i].release));
+        s_deferred[i] = std::move(s_deferred.back());
+        s_deferred.pop_back();
+      } else {
+        i++;
+      }
+    }
+  }
+  for (auto &fn : due) {
+    fn();
+  }
+}
+
+} // namespace
+
+void godot::spout_defer_release(std::function<void()> p_release) {
+  std::lock_guard<std::mutex> guard(s_deferred_lock);
+  s_deferred.push_back(
+      {std::move(p_release), Engine::get_singleton()->get_frames_drawn() +
+                                 SPOUT_RELEASE_DELAY_FRAMES});
+  if (!s_pump_connected) {
+    // Stays connected for the rest of the run; pumping an empty list is free.
+    RenderingServer::get_singleton()->connect(
+        "frame_post_draw", callable_mp_static(&pump_deferred_releases));
+    s_pump_connected = true;
+  }
+}
+
+void godot::spout_deferred_release_shutdown() {
+  pump_deferred_releases();
+  std::lock_guard<std::mutex> guard(s_deferred_lock);
+  if (s_pump_connected &&
+      Engine::get_singleton()->has_singleton("RenderingServer")) {
+    RenderingServer::get_singleton()->disconnect(
+        "frame_post_draw", callable_mp_static(&pump_deferred_releases));
+  }
+  s_pump_connected = false;
+  // Not released: may still be referenced by the last submitted frames.
+  s_deferred.clear();
 }

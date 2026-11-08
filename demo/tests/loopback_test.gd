@@ -204,7 +204,10 @@ func _score(r: int) -> void:
 			lag = k
 			break
 	if lag < 0:
-		stats["unexpected"] += 1
+		# Before the first match the receiver is still connecting (it polls for
+		# the sender every 250 ms); only count mismatches after that.
+		if stats["first_match_frame"] >= 0 and phase == "run":
+			stats["unexpected"] += 1
 		_recent.append(false)
 	else:
 		if r == last_received:
@@ -221,7 +224,7 @@ func _score(r: int) -> void:
 
 func _finish() -> bool:
 	var pass_ok: bool = (
-		stats["matched"] > stats["frames"] * 0.8
+		stats["matched"] > (stats["frames"] - max(stats["first_match_frame"], 0)) * 0.8
 		and stats["unexpected"] == 0
 		and (stats["switch_ok"] == null or stats["switch_ok"])
 		and (stats["resize_ok"] == null or stats["resize_ok"])

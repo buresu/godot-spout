@@ -37,30 +37,9 @@ endif()
 add_subdirectory("${PROJECT_SOURCE_DIR}/lib/Spout2" EXCLUDE_FROM_ALL)
 
 if(GODOT_SPOUT_ENABLE_VULKAN)
+    # Only the Vulkan headers and loader are needed: the interop code lives in
+    # src/SpoutVulkanGpu.cpp. lib/SpoutVulkan is no longer compiled.
     find_package(Vulkan REQUIRED)
-
-    add_library(SpoutVK_static STATIC
-        "${PROJECT_SOURCE_DIR}/lib/SpoutVulkan/Examples/SpoutVK.cpp"
-        "${PROJECT_SOURCE_DIR}/lib/SpoutVulkan/Examples/SpoutDX/SpoutDirectX.cpp"
-        "${PROJECT_SOURCE_DIR}/lib/SpoutVulkan/Examples/SpoutDX/SpoutFrameCount.cpp"
-        "${PROJECT_SOURCE_DIR}/lib/SpoutVulkan/Examples/SpoutDX/SpoutSenderNames.cpp"
-        "${PROJECT_SOURCE_DIR}/lib/SpoutVulkan/Examples/SpoutDX/SpoutSharedMemory.cpp"
-        "${PROJECT_SOURCE_DIR}/lib/SpoutVulkan/Examples/SpoutDX/SpoutUtils.cpp"
-    )
-    set_target_properties(SpoutVK_static PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
-    target_include_directories(SpoutVK_static PUBLIC
-        ${Vulkan_INCLUDE_DIRS}
-        "${PROJECT_SOURCE_DIR}/lib/SpoutVulkan/Examples"
-        "${PROJECT_SOURCE_DIR}/lib/SpoutVulkan/Examples/SpoutDX"
-    )
-    target_link_libraries(SpoutVK_static PUBLIC Vulkan::Vulkan d3d11 dxgi)
-    target_compile_definitions(SpoutVK_static PUBLIC VK_USE_PLATFORM_WIN32_KHR)
-    if(ARCH STREQUAL "arm64")
-        target_compile_options(SpoutVK_static PRIVATE /Zc:preprocessor)
-        target_include_directories(SpoutVK_static PRIVATE
-            ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/sse2neon
-        )
-    endif()
 endif()
 
 file(GLOB_RECURSE INCLUDES "src/*.hpp")
@@ -101,8 +80,9 @@ if(GODOT_SPOUT_ENABLE_OPENGL)
 endif()
 
 if(GODOT_SPOUT_ENABLE_VULKAN)
-    target_compile_definitions(GodotSpout PRIVATE GODOT_SPOUT_ENABLE_VULKAN)
-    target_link_libraries(GodotSpout PRIVATE SpoutVK_static)
+    target_compile_definitions(GodotSpout PRIVATE
+        GODOT_SPOUT_ENABLE_VULKAN VK_USE_PLATFORM_WIN32_KHR)
+    target_link_libraries(GodotSpout PRIVATE Vulkan::Vulkan)
 endif()
 
 set(GODOT_SPOUT_ADDON_DIR "${PROJECT_SOURCE_DIR}/demo/addons/godot-spout")

@@ -3,15 +3,17 @@
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/texture2drd.hpp>
 
+#include "SpoutCore.hpp"
+
 namespace godot {
 
-class SpoutBackend;
-
+// Receives a Spout sender into a Texture2DRD. Active while the node is inside
+// the scene tree.
 class SpoutInput : public Node {
   GDCLASS(SpoutInput, Node)
 public:
   SpoutInput();
-  virtual ~SpoutInput();
+  ~SpoutInput() override;
 
   String get_channel_name() const;
   void set_channel_name(String p_name);
@@ -21,18 +23,17 @@ public:
 
 protected:
   static void _bind_methods();
-  bool _is_initialized() const;
-  bool _create_receiver();
-  void _release_receiver();
-  bool _create_texture(uint32_t p_width, uint32_t p_height);
-  void _release_texture();
-  void _receive_texture();
+  void _notification(int p_what);
 
 private:
-  SpoutBackend *_backend = nullptr;
+  void _start();
+  void _stop();
+  void _on_frame_pre_draw();
+  void _process_frame();
+  void _show(const RID &p_rid);
 
-  // Godot texture
-  RID _rd_texture;
+  SpoutReceiverCore _core;
+  bool _connected = false;
 
   // Properties
   String _channel_name;
