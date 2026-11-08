@@ -2,6 +2,10 @@
 
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
+#include <godot_cpp/classes/scene_tree.hpp>
+#include <godot_cpp/classes/viewport.hpp>
+#include <godot_cpp/classes/viewport_texture.hpp>
+#include <godot_cpp/classes/window.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
 using namespace godot;
@@ -140,6 +144,9 @@ void SpoutOutput::set_texture(Ref<Texture2D> p_texture) {
   // size and format match), so receivers don't see it disappear.
   _texture = p_texture;
   _core.set_texture(p_texture);
+  _gl_viewport = ObjectID();
+  _gl_resolve_at_msec = 0;
+  _core.set_gl_source(RID());
 }
 
 void SpoutOutput::set_enabled(bool p_enabled) {
@@ -276,8 +283,56 @@ void SpoutOutput::_on_frame_post_draw() {
   _process_frame();
 }
 
-void SpoutOutput::_process_frame() {
-  if (_connected) {
-    _core.on_frame_post_draw();
+void SpoutOutput::_resolve_gl_source() {
+  // In the Compatibility renderer, a ViewportTexture's RID is a proxy that
+  // has no GL texture name (texture_get_native_handle returns 0), so the old
+  // code never sent viewports on OpenGL. Find the viewport the texture
+  // belongs to and send its render target instead. RD drivers don't need
+  // this: texture_get_rd_texture resolves proxies.
+  RenderingServer *rs = RenderingServer::get_singleton();
+  Viewport *viewport =
+      Object::cast_to<Viewport>(ObjectDB::get_instance(_gl_viewport));
+  Ref<ViewportTexture> vt = _texture;
+  if (!viewport && vt.is_valid() && spout_ticks_msec() >= _gl_resolve_at_msec) {
+    // Rate-limited: the search walks the scene tree.
+    _gl_resolve_at_msec = spout_ticks_msec() + 1000;
+    // A ViewportTexture resource in a scene: path relative to its scene.
+    Node *scene = vt->get_local_scene();
+    if (scene && !vt->get_viewport_path_in_scene().is_empty()) {
+      viewport = Object::cast_to<Viewport>(
+          scene->get_node_or_null(vt->get_viewport_path_in_scene()));
+    }
+    // SubViewport.get_texture(): find the viewport that returns it.
+    if (!viewport && is_inside_tree()) {
+      Window *root = get_tree()->get_root();
+      if (root->get_texture() == vt) {
+        viewport = root;
+      } else {
+        TypedArray<Node> found =
+            root->find_children("*", "SubViewport", true, false);
+        for (int i = 0; i < found.size() && !viewport; i++) {
+          Viewport *v = Object::cast_to<Viewport>(found[i]);
+          if (v && v->get_texture() == vt) {
+            viewport = v;
+          }
+        }
+      }
+    }
+    _gl_viewport = viewport ? viewport->get_instance_id() : ObjectID();
   }
+  _core.set_gl_source(
+      viewport ? rs->viewport_get_texture(viewport->get_viewport_rid())
+               : RID());
+}
+
+void SpoutOutput::_process_frame() {
+  if (!_connected) {
+    return;
+  }
+  if (_texture.is_valid() &&
+      RenderingServer::get_singleton()->get_current_rendering_driver_name() ==
+          "opengl3") {
+    _resolve_gl_source();
+  }
+  _core.on_frame_post_draw();
 }

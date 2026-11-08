@@ -72,9 +72,13 @@ private:
   void _on_frame_post_draw();
   void _process_frame();
   void _apply_options();
+  void _resolve_gl_source();
 
   SpoutSenderCore _core;
   bool _connected = false;
+  // OpenGL: the viewport whose render target backs _texture, if any.
+  ObjectID _gl_viewport;
+  uint64_t _gl_resolve_at_msec = 0;
 
   // Properties
   String _channel_name = "godot-spout";
