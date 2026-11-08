@@ -2,6 +2,7 @@
 
 #include <godot_cpp/core/class_db.hpp>
 
+#include "SpoutCommon.hpp"
 #include "SpoutInput.hpp"
 #include "SpoutOutput.hpp"
 #include "SpoutTexture.hpp"
@@ -11,6 +12,8 @@ void initialize_spout_module(ModuleInitializationLevel p_level) {
   if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
     return;
   }
+
+  spout_diagnostics_init();
 
   ClassDB::register_class<SpoutOutput>();
   ClassDB::register_class<SpoutInput>();
