@@ -1,23 +1,13 @@
 #include "SpoutInput.hpp"
 
-#include "SpoutBackend.hpp"
-#include "SpoutBackendFactory.hpp"
-
-#include <godot_cpp/classes/rd_texture_format.hpp>
-#include <godot_cpp/classes/rd_texture_view.hpp>
-#include <godot_cpp/classes/rendering_device.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
-#include <godot_cpp/classes/texture2drd.hpp>
 #include <godot_cpp/core/class_db.hpp>
-#include <godot_cpp/godot.hpp>
 
 using namespace godot;
 
 void SpoutInput::_bind_methods() {
 
   // Bind methods
-  ClassDB::bind_method(D_METHOD("_receive_texture"),
-                       &SpoutInput::_receive_texture);
   ClassDB::bind_method(D_METHOD("get_channel_name"),
                        &SpoutInput::get_channel_name);
   ClassDB::bind_method(D_METHOD("set_channel_name", "name"),
@@ -36,24 +26,16 @@ void SpoutInput::_bind_methods() {
 }
 
 SpoutInput::SpoutInput() : Node() {
-  RenderingServer::get_singleton()->connect("frame_pre_draw",
-                                            {this, "_receive_texture"});
+  _core.set_texture_handler([this](const RID &p_rid) { _show(p_rid); });
 }
 
-SpoutInput::~SpoutInput() {
-
-  RenderingServer::get_singleton()->disconnect("frame_pre_draw",
-                                               {this, "_receive_texture"});
-
-  _release_receiver();
-  _release_texture();
-}
+SpoutInput::~SpoutInput() { _stop(); }
 
 String SpoutInput::get_channel_name() const { return _channel_name; }
 
 void SpoutInput::set_channel_name(String p_name) {
   _channel_name = p_name;
-  _release_receiver();
+  _core.set_name(p_name);
 }
 
 Ref<Texture2DRD> SpoutInput::get_texture() const { return _texture; }
@@ -62,134 +44,67 @@ void SpoutInput::set_texture(Ref<Texture2DRD> p_texture) {
   if (_texture == p_texture) {
     return;
   }
-  // Clear RID from old texture
-  if (_texture.is_valid()) {
+  if (_texture.is_valid() && spout_rendering_available()) {
     _texture->set_texture_rd_rid(RID());
   }
   _texture = p_texture;
-  // Apply current RID to new texture immediately if already receiving
-  if (_texture.is_valid() && _rd_texture.is_valid()) {
-    _texture->set_texture_rd_rid(_rd_texture);
+  // Show the current frame right away if we're already receiving.
+  _show(_core.get_visible_texture());
+}
+
+void SpoutInput::_show(const RID &p_rid) {
+  if (_texture.is_valid() && spout_rendering_available()) {
+    _texture->set_texture_rd_rid(p_rid);
   }
 }
 
-bool SpoutInput::_is_initialized() const {
-  return _backend != nullptr && _backend->is_initialized();
-}
-
-bool SpoutInput::_create_receiver() {
-
-  _release_receiver();
-
-  auto rs = RenderingServer::get_singleton();
-  auto rd = rs->get_rendering_device();
-  auto driver = rs->get_current_rendering_driver_name();
-  if (driver != "opengl3" && !rd) {
-    return false;
-  }
-
-  _backend = spout_backend_create(driver, "SpoutInput");
-  if (!_backend || !_backend->initialize(rd)) {
-    _release_receiver();
-    return false;
-  }
-
-  return true;
-}
-
-void SpoutInput::_release_receiver() {
-
-  if (_backend) {
-    _backend->release();
-    delete _backend;
-    _backend = nullptr;
+void SpoutInput::_notification(int p_what) {
+  switch (p_what) {
+  case NOTIFICATION_ENTER_TREE:
+    _start();
+    break;
+  case NOTIFICATION_EXIT_TREE:
+  case NOTIFICATION_PREDELETE:
+    _stop();
+    break;
+  default:
+    break;
   }
 }
 
-bool SpoutInput::_create_texture(uint32_t p_width, uint32_t p_height) {
-
-  auto rd = RenderingServer::get_singleton()->get_rendering_device();
-  if (!rd) {
-    return false;
-  }
-
-  _release_texture();
-
-  Ref<RDTextureFormat> fmt;
-  fmt.instantiate();
-  fmt->set_format(RenderingDevice::DATA_FORMAT_B8G8R8A8_UNORM);
-  fmt->set_width(p_width);
-  fmt->set_height(p_height);
-  fmt->set_depth(1);
-  fmt->set_array_layers(1);
-  fmt->set_mipmaps(1);
-  fmt->set_texture_type(RenderingDevice::TEXTURE_TYPE_2D);
-  fmt->set_samples(RenderingDevice::TEXTURE_SAMPLES_1);
-  fmt->set_usage_bits(RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT |
-                      RenderingDevice::TEXTURE_USAGE_CAN_COPY_TO_BIT);
-
-  Ref<RDTextureView> view;
-  view.instantiate();
-
-  _rd_texture = rd->texture_create(fmt, view);
-  if (!_rd_texture.is_valid()) {
-    return false;
-  }
-
-  if (_texture.is_valid()) {
-    _texture->set_texture_rd_rid(_rd_texture);
-  }
-
-  return true;
-}
-
-void SpoutInput::_release_texture() {
-
-  if (_rd_texture.is_valid()) {
-    if (_texture.is_valid()) {
-      _texture->set_texture_rd_rid(RID());
-    }
-    auto rd = RenderingServer::get_singleton()->get_rendering_device();
-    if (rd) {
-      rd->free_rid(_rd_texture);
-    }
-    _rd_texture = RID();
-  }
-}
-
-void SpoutInput::_receive_texture() {
-
-  if (_texture.is_null()) {
+void SpoutInput::_start() {
+  if (_connected || !spout_rendering_available()) {
     return;
   }
+  RenderingServer::get_singleton()->connect(
+      "frame_pre_draw", callable_mp(this, &SpoutInput::_on_frame_pre_draw));
+  _connected = true;
+}
 
-  if (!_is_initialized()) {
-    if (!_create_receiver()) {
-      return;
-    }
+void SpoutInput::_stop() {
+  if (_connected && spout_rendering_available()) {
+    RenderingServer::get_singleton()->disconnect(
+        "frame_pre_draw", callable_mp(this, &SpoutInput::_on_frame_pre_draw));
   }
+  _connected = false;
+  if (spout_rendering_available()) {
+    _core.release();
+  }
+}
 
-  auto channel = _channel_name.utf8();
-  if (!_backend->update_receiver(channel.get_data())) {
-    _release_receiver();
+void SpoutInput::_on_frame_pre_draw() {
+  // RenderingDevice must only be used on the render thread. frame_pre_draw is
+  // normally emitted there; hop over if it ever isn't.
+  RenderingServer *rs = RenderingServer::get_singleton();
+  if (!rs->is_on_render_thread()) {
+    rs->call_on_render_thread(callable_mp(this, &SpoutInput::_process_frame));
     return;
   }
+  _process_frame();
+}
 
-  auto width = _backend->get_sender_width();
-  auto height = _backend->get_sender_height();
-  if (width == 0 || height == 0) {
-    return;
-  }
-
-  if (!_rd_texture.is_valid() ||
-      static_cast<uint32_t>(_texture->get_width()) != width ||
-      static_cast<uint32_t>(_texture->get_height()) != height) {
-    if (!_create_texture(width, height)) {
-      return;
-    }
-  }
-
-  if (!_backend->receive(_rd_texture, width, height, channel.get_data())) {
-    _release_receiver();
+void SpoutInput::_process_frame() {
+  if (_connected) {
+    _core.on_frame_pre_draw();
   }
 }

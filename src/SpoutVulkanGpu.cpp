@@ -5,11 +5,7 @@
 #include "SpoutD3D11.hpp"
 #include "SpoutShare.hpp"
 
-#include <godot_cpp/classes/engine.hpp>
-
 #include <cstring>
-#include <mutex>
-#include <vector>
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -119,51 +115,8 @@ String device_name(VkPhysicalDevice p_physical) {
   return String::utf8(props.deviceName);
 }
 
-// Images whose RD wrapper was freed but which the GPU may still use. RD
-// defers the free of its own objects by a few frames; the VkImage and memory
-// belong to us, so we keep them around for longer than Godot's frame queue.
-struct Garbage {
-  VkDevice device;
-  VkImage image;
-  VkDeviceMemory memory;
-  int64_t safe_after_frame;
-};
-std::mutex s_garbage_lock;
-std::vector<Garbage> s_garbage;
-int s_live_backends = 0;
-constexpr int GARBAGE_DELAY_FRAMES = 4;
-
-void destroy_now(const Garbage &p) {
-  if (p.image) {
-    vkDestroyImage(p.device, p.image, nullptr);
-  }
-  if (p.memory) {
-    vkFreeMemory(p.device, p.memory, nullptr);
-  }
-}
-
-void collect_garbage(bool p_force) {
-  std::lock_guard<std::mutex> guard(s_garbage_lock);
-  if (s_garbage.empty()) {
-    return;
-  }
-  const int64_t frame = Engine::get_singleton()->get_frames_drawn();
-  if (p_force) {
-    // Last Vulkan backend is going away: nobody will pump this list again.
-    // Wait once (scene change / quit only) rather than leak.
-    vkDeviceWaitIdle(s_garbage.front().device);
-  }
-  for (size_t i = 0; i < s_garbage.size();) {
-    if (p_force || frame > s_garbage[i].safe_after_frame) {
-      destroy_now(s_garbage[i]);
-      s_garbage[i] = s_garbage.back();
-      s_garbage.pop_back();
-    } else {
-      i++;
-    }
-  }
-}
-
+// The RD wrapper of an import was freed; the VkImage and memory are ours and
+// may still be used by the frame Godot is recording and the frames in flight.
 void discard(RenderingDevice *p_rd, std::unique_ptr<SpoutVulkanImport> &p) {
   if (!p) {
     return;
@@ -171,11 +124,18 @@ void discard(RenderingDevice *p_rd, std::unique_ptr<SpoutVulkanImport> &p) {
   if (p->rid.is_valid()) {
     p_rd->free_rid(p->rid); // frees Godot's view; the image stays ours
   }
-  if (p->image || p->memory) {
-    std::lock_guard<std::mutex> guard(s_garbage_lock);
-    s_garbage.push_back(
-        {p->device, p->image, p->memory,
-         Engine::get_singleton()->get_frames_drawn() + GARBAGE_DELAY_FRAMES});
+  const VkDevice device = p->device;
+  const VkImage image = p->image;
+  const VkDeviceMemory memory = p->memory;
+  if (image || memory) {
+    spout_defer_release([device, image, memory]() {
+      if (image) {
+        vkDestroyImage(device, image, nullptr);
+      }
+      if (memory) {
+        vkFreeMemory(device, memory, nullptr);
+      }
+    });
   }
   p.reset();
 }
@@ -358,27 +318,12 @@ import_texture(RenderingDevice *p_rd, const VkContext &p_vk, uint64_t p_handle,
   return result;
 }
 
-void backend_created() {
-  std::lock_guard<std::mutex> guard(s_garbage_lock);
-  s_live_backends++;
-}
-
-void backend_destroyed() {
-  bool last;
-  {
-    std::lock_guard<std::mutex> guard(s_garbage_lock);
-    last = --s_live_backends == 0;
-  }
-  collect_garbage(last);
-}
-
 } // namespace
 
 // ---------------------------------------------------------------------------
 // Sender
 
 SpoutVulkanSender::SpoutVulkanSender(RenderingDevice *p_rd) : _rd(p_rd) {
-  backend_created();
   VkContext vk = get_context(p_rd);
   uint64_t luid = 0;
   if (!vk.physical || !vk.device) {
@@ -395,10 +340,7 @@ SpoutVulkanSender::SpoutVulkanSender(RenderingDevice *p_rd) : _rd(p_rd) {
   _usable = _d3d11 != nullptr;
 }
 
-SpoutVulkanSender::~SpoutVulkanSender() {
-  release();
-  backend_destroyed();
-}
+SpoutVulkanSender::~SpoutVulkanSender() { release(); }
 
 RID SpoutVulkanSender::get_target() const {
   return _import ? _import->rid : RID();
@@ -414,7 +356,6 @@ String SpoutVulkanSender::get_adapter_name() const {
 
 bool SpoutVulkanSender::ensure(uint32_t p_width, uint32_t p_height,
                                SpoutSendFormat p_format) {
-  collect_garbage(false);
   if (!_usable) {
     return false;
   }
@@ -468,21 +409,16 @@ void SpoutVulkanSender::release() {
 // Receiver
 
 SpoutVulkanReceiver::SpoutVulkanReceiver(RenderingDevice *p_rd) : _rd(p_rd) {
-  backend_created();
   VkContext vk = get_context(p_rd);
   if (vk.physical) {
     _adapter_name = device_name(vk.physical);
   }
 }
 
-SpoutVulkanReceiver::~SpoutVulkanReceiver() {
-  close();
-  backend_destroyed();
-}
+SpoutVulkanReceiver::~SpoutVulkanReceiver() { close(); }
 
 bool SpoutVulkanReceiver::open(const SpoutSenderInfo &p_info, String &r_error) {
   close();
-  collect_garbage(false);
   const RenderingDevice::DataFormat format =
       spout_dxgi_to_rd(p_info.dxgi_format);
   if (format == RenderingDevice::DATA_FORMAT_MAX) {
@@ -513,7 +449,6 @@ bool SpoutVulkanReceiver::source_supports_copy() const {
 
 bool SpoutVulkanReceiver::acquire(SpoutGodotAccess p_last_access,
                                   SpoutShareReceiver &p_share) {
-  collect_garbage(false);
   // The imported image aliases the sender's texture, so there is nothing to
   // copy here. Skip the very first frame: Godot's first transition of a new
   // image starts from UNDEFINED, which may discard contents.
