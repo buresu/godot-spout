@@ -82,12 +82,10 @@ target_include_directories(GodotSpout PRIVATE
     ${PROJECT_SOURCE_DIR}/lib/godot-cpp/gen/include
     ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX
     ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX/SpoutDX12
+    # Spout protocol helpers (spoutSenderNames, spoutFrameCount, SpoutUtils),
+    # compiled into SpoutDX_static and used by all backends.
+    ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutGL
 )
-if(GODOT_SPOUT_ENABLE_OPENGL)
-    target_include_directories(GodotSpout PRIVATE
-        ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutGL
-    )
-endif()
 if(ARCH STREQUAL "arm64")
     target_compile_options(GodotSpout PRIVATE /Zc:preprocessor)
     target_include_directories(GodotSpout PRIVATE
@@ -95,7 +93,7 @@ if(ARCH STREQUAL "arm64")
     )
 endif()
 
-target_link_libraries(GodotSpout PRIVATE godot-cpp SpoutDX12_static)
+target_link_libraries(GodotSpout PRIVATE godot-cpp SpoutDX12_static d3d11 d3d12 dxgi)
 
 if(GODOT_SPOUT_ENABLE_OPENGL)
     target_compile_definitions(GodotSpout PRIVATE GODOT_SPOUT_ENABLE_OPENGL)
