@@ -32,15 +32,33 @@ using namespace godot;
 //   acquire(): D3D11On12 copies shared texture -> _source and Flush()es before
 //   Godot submits frame N, which then reads _source. No latency.
 //
-// Resource states: Godot's D3D12 driver tracks legacy resource states per
-// texture. D3D11On12's CreateWrappedResource takes the state the resource is
-// in when we acquire it (InState) and the state to leave it in when we release
-// it (OutState). We pass the *same* state for both, namely the state Godot's
-// last operation on the texture left it in, so Godot's bookkeeping stays true.
-// Only texture_copy and our compute pass ever touch _target / _source on the
-// Godot side, so that state is one of two values per texture (see
-// state_for()). One wrapped resource is kept per state because the states are
-// fixed at wrap time.
+// Resource states
+// ---------------
+// Godot and D3D11On12 both touch our texture (_target / _source), so Godot's
+// idea of its state must agree with what D3D11On12 does. Two cases:
+//
+// * Enhanced barriers
+// (D3D12_FEATURE_D3D12_OPTIONS12::EnhancedBarriersSupported,
+//   which Godot uses whenever the device has it). D3D11On12 records legacy
+//   ResourceBarriers, and mixing legacy and enhanced barriers on one texture
+//   is only legal while it is in the COMMON layout (debug layer: "layout
+//   ..._COPY_DEST does not support barrier interop"). Godot's graph would put
+//   the texture into COPY_DEST / COPY_SOURCE / ... layouts. So we create the
+//   resource ourselves with D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS and
+//   hand it to Godot with texture_create_from_extension(). Godot's driver
+//   emits no barriers for simultaneous-access textures
+//   (RenderingDeviceDriverD3D12::command_pipeline_barrier skips them), so the
+//   texture stays in COMMON, and we wrap it with InState = OutState = COMMON.
+//   Ordering between Godot's command lists and ours comes from the queue:
+//   separate ExecuteCommandLists calls on one queue complete in order with
+//   caches flushed in between.
+//
+// * Legacy barriers (older drivers/GPUs). Godot tracks a legacy state per
+//   texture. We wrap with InState = OutState = the state Godot's last access
+//   left the texture in (see state_for()), so its bookkeeping stays true. One
+//   wrapped resource is kept per state because states are fixed at wrap time.
+//   This path is not exercised on the development machine (it has enhanced
+//   barriers); see docs/EXECUTION_TRACKER.md.
 //
 // Cross-process sync with receivers/senders is Spout's: the access mutex
 // around the copy, and DXGI's implicit synchronisation of legacy shared
@@ -49,9 +67,11 @@ using namespace godot;
 namespace {
 
 // State Godot leaves a texture in after the last access we recorded.
-// Validated with GODOT_SPOUT_D3D12_DEBUG=1 + --gpu-validation (see
-// docs/EXECUTION_TRACKER.md, P0-5 / P0-7).
-D3D12_RESOURCE_STATES state_for(SpoutGodotAccess p_access, bool p_written) {
+D3D12_RESOURCE_STATES state_for(SpoutGodotAccess p_access, bool p_written,
+                                bool p_simultaneous) {
+  if (p_simultaneous) {
+    return D3D12_RESOURCE_STATE_COMMON;
+  }
   switch (p_access) {
   case SPOUT_ACCESS_COPY:
     return p_written ? D3D12_RESOURCE_STATE_COPY_DEST
@@ -61,6 +81,100 @@ D3D12_RESOURCE_STATES state_for(SpoutGodotAccess p_access, bool p_written) {
                      : D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
   default:
     return D3D12_RESOURCE_STATE_COMMON;
+  }
+}
+
+ID3D12Device *get_device12(RenderingDevice *p_rd) {
+  return reinterpret_cast<ID3D12Device *>(p_rd->get_driver_resource(
+      RenderingDevice::DRIVER_RESOURCE_LOGICAL_DEVICE, RID(), 0));
+}
+
+bool has_enhanced_barriers(ID3D12Device *p_device) {
+  D3D12_FEATURE_DATA_D3D12_OPTIONS12 options = {};
+  return p_device &&
+         SUCCEEDED(p_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS12,
+                                                 &options, sizeof(options))) &&
+         options.EnhancedBarriersSupported;
+}
+
+// Creates the texture shared between Godot and D3D11On12 (see "Resource
+// states" above). r_owned is set when we own the D3D12 resource.
+RID create_texture(RenderingDevice *p_rd, uint32_t p_width, uint32_t p_height,
+                   RenderingDevice::DataFormat p_rd_format,
+                   uint32_t p_dxgi_format, bool p_storage,
+                   ID3D12Resource **r_owned, bool *r_simultaneous) {
+  *r_owned = nullptr;
+  *r_simultaneous = false;
+  BitField<RenderingDevice::TextureUsageBits> usage =
+      RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT |
+      RenderingDevice::TEXTURE_USAGE_CAN_COPY_TO_BIT |
+      RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
+  if (p_storage) {
+    usage.set_flag(RenderingDevice::TEXTURE_USAGE_STORAGE_BIT);
+  }
+
+  ID3D12Device *device = get_device12(p_rd);
+  if (has_enhanced_barriers(device)) {
+    D3D12_HEAP_PROPERTIES heap = {};
+    heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+    D3D12_RESOURCE_DESC desc = {};
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Width = p_width;
+    desc.Height = p_height;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.Format = static_cast<DXGI_FORMAT>(p_dxgi_format);
+    desc.SampleDesc.Count = 1;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
+    if (p_storage) {
+      desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    }
+    ID3D12Resource *resource = nullptr;
+    HRESULT hr = device->CreateCommittedResource(
+        &heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON,
+        nullptr, IID_PPV_ARGS(&resource));
+    if (FAILED(hr)) {
+      spout_error("CreateCommittedResource failed (0x" +
+                  String::num_int64(static_cast<uint32_t>(hr), 16) + ").");
+      return RID();
+    }
+    const RID rid = p_rd->texture_create_from_extension(
+        RenderingDevice::TEXTURE_TYPE_2D, p_rd_format,
+        RenderingDevice::TEXTURE_SAMPLES_1, usage,
+        reinterpret_cast<uint64_t>(resource), p_width, p_height, 1, 1);
+    if (!rid.is_valid()) {
+      resource->Release();
+      return RID();
+    }
+    *r_owned = resource;
+    *r_simultaneous = true;
+    return rid;
+  }
+
+  // Legacy barriers: let Godot create and track the texture. No shareable
+  // formats: we never need views of another format.
+  Ref<RDTextureFormat> fmt;
+  fmt.instantiate();
+  fmt->set_format(p_rd_format);
+  fmt->set_width(p_width);
+  fmt->set_height(p_height);
+  fmt->set_usage_bits(usage);
+  Ref<RDTextureView> view;
+  view.instantiate();
+  return p_rd->texture_create(fmt, view);
+}
+
+void free_texture(RenderingDevice *p_rd, RID &p_rid, ID3D12Resource *&p_owned) {
+  if (p_rid.is_valid()) {
+    p_rd->free_rid(p_rid); // Godot defers this until its frames are done
+    p_rid = RID();
+  }
+  if (p_owned) {
+    // The frame Godot is recording may still copy into / out of it.
+    ID3D12Resource *resource = p_owned;
+    spout_defer_release([resource]() { resource->Release(); });
+    p_owned = nullptr;
   }
 }
 
@@ -135,21 +249,11 @@ bool SpoutD3D12Sender::ensure(uint32_t p_width, uint32_t p_height,
   }
   release();
 
-  // Our own target. Godot writes it with texture_copy or a compute pass
-  // (STORAGE), D3D11On12 reads it. No shareable formats: we never need views
-  // of another format, and it keeps Godot from creating a TYPELESS resource.
-  Ref<RDTextureFormat> fmt;
-  fmt.instantiate();
-  fmt->set_format(spout_send_format_to_rd(p_format));
-  fmt->set_width(p_width);
-  fmt->set_height(p_height);
-  fmt->set_usage_bits(RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT |
-                      RenderingDevice::TEXTURE_USAGE_STORAGE_BIT |
-                      RenderingDevice::TEXTURE_USAGE_CAN_COPY_TO_BIT |
-                      RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT);
-  Ref<RDTextureView> view;
-  view.instantiate();
-  _target = _rd->texture_create(fmt, view);
+  // Our own target: Godot writes it (texture_copy or the compute pass), and
+  // D3D11On12 reads it. Typed format, never TYPELESS.
+  _target = create_texture(
+      _rd, p_width, p_height, spout_send_format_to_rd(p_format),
+      spout_send_format_to_dxgi(p_format), true, &_owned, &_simultaneous);
   if (!_target.is_valid()) {
     spout_error("Could not create the send texture.");
     return false;
@@ -177,7 +281,7 @@ ID3D11Resource *SpoutD3D12Sender::wrapped_for(SpoutGodotAccess p_access) {
     auto resource = reinterpret_cast<ID3D12Resource *>(_rd->get_driver_resource(
         RenderingDevice::DRIVER_RESOURCE_TEXTURE, _target, 0));
     if (resource) {
-      slot = wrap(*_d3d11, resource, state_for(p_access, true));
+      slot = wrap(*_d3d11, resource, state_for(p_access, true, _simultaneous));
     }
   }
   return slot;
@@ -208,10 +312,7 @@ void SpoutD3D12Sender::release() {
   safe_release(_wrapped_shader);
   safe_release(_shared);
   _share_handle = 0;
-  if (_target.is_valid()) {
-    _rd->free_rid(_target);
-    _target = RID();
-  }
+  free_texture(_rd, _target, _owned);
   _width = _height = 0;
 }
 
@@ -253,17 +354,8 @@ bool SpoutD3D12Receiver::open(const SpoutSenderInfo &p_info, String &r_error) {
   // Same memory layout as the sender's texture so D3D11 CopyResource is
   // valid. (The old code always used BGRA8, which is an invalid copy from
   // RGBA8 / RGBA16F senders; plan bug B4.)
-  Ref<RDTextureFormat> fmt;
-  fmt.instantiate();
-  fmt->set_format(_source_format);
-  fmt->set_width(desc.Width);
-  fmt->set_height(desc.Height);
-  fmt->set_usage_bits(RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT |
-                      RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT |
-                      RenderingDevice::TEXTURE_USAGE_CAN_COPY_TO_BIT);
-  Ref<RDTextureView> view;
-  view.instantiate();
-  _source = _rd->texture_create(fmt, view);
+  _source = create_texture(_rd, desc.Width, desc.Height, _source_format, dxgi,
+                           false, &_owned, &_simultaneous);
   if (!_source.is_valid()) {
     r_error = "could not create the receive texture";
     close();
@@ -277,10 +369,7 @@ void SpoutD3D12Receiver::close() {
   safe_release(_wrapped_copy);
   safe_release(_wrapped_shader);
   safe_release(_shared);
-  if (_source.is_valid()) {
-    _rd->free_rid(_source);
-    _source = RID();
-  }
+  free_texture(_rd, _source, _owned);
   _source_format = RenderingDevice::DATA_FORMAT_MAX;
 }
 
@@ -291,7 +380,7 @@ ID3D11Resource *SpoutD3D12Receiver::wrapped_for(SpoutGodotAccess p_access) {
     auto resource = reinterpret_cast<ID3D12Resource *>(_rd->get_driver_resource(
         RenderingDevice::DRIVER_RESOURCE_TEXTURE, _source, 0));
     if (resource) {
-      slot = wrap(*_d3d11, resource, state_for(p_access, false));
+      slot = wrap(*_d3d11, resource, state_for(p_access, false, _simultaneous));
     }
   }
   return slot;
@@ -302,11 +391,11 @@ bool SpoutD3D12Receiver::acquire(SpoutGodotAccess p_last_access,
   if (!_shared || !_source.is_valid()) {
     return false;
   }
-  if (p_last_access == SPOUT_ACCESS_NONE) {
-    // Godot hasn't read _source yet, so we don't know which state its tracker
-    // has it in. Skip the copy this once; the core still issues its read so
-    // the state becomes known for the next frame. The core doesn't show the
-    // texture before the first real frame.
+  if (p_last_access == SPOUT_ACCESS_NONE && !_simultaneous) {
+    // Legacy barriers: Godot hasn't read _source yet, so we don't know which
+    // state its tracker has it in. Skip the copy this once; the core still
+    // issues its read so the state becomes known for the next frame. The core
+    // doesn't show the texture before the first real frame.
     return false;
   }
   ID3D11Resource *wrapped = wrapped_for(p_last_access);
