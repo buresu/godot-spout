@@ -8,6 +8,7 @@
 
 struct ID3D11Resource;
 struct ID3D11Texture2D;
+struct ID3D12Resource;
 
 namespace godot {
 
@@ -37,6 +38,10 @@ private:
   RenderingDevice *_rd = nullptr;
   std::shared_ptr<SpoutD3D11Device> _d3d11;
   RID _target;
+  // Set when we created the resource ourselves (simultaneous access, see
+  // SpoutD3D12Gpu.cpp); then we own it and Godot only has a view of it.
+  ID3D12Resource *_owned = nullptr;
+  bool _simultaneous = false;
   ID3D11Resource *_wrapped_copy = nullptr;
   ID3D11Resource *_wrapped_shader = nullptr;
   ID3D11Texture2D *_shared = nullptr;
@@ -72,6 +77,8 @@ private:
   std::shared_ptr<SpoutD3D11Device> _d3d11;
   ID3D11Texture2D *_shared = nullptr;
   RID _source;
+  ID3D12Resource *_owned = nullptr;
+  bool _simultaneous = false;
   RenderingDevice::DataFormat _source_format = RenderingDevice::DATA_FORMAT_MAX;
   ID3D11Resource *_wrapped_copy = nullptr;
   ID3D11Resource *_wrapped_shader = nullptr;
