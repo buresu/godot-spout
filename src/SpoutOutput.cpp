@@ -1,5 +1,6 @@
 #include "SpoutOutput.hpp"
 
+#include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
@@ -15,6 +16,44 @@ void SpoutOutput::_bind_methods() {
   ClassDB::bind_method(D_METHOD("get_texture"), &SpoutOutput::get_texture);
   ClassDB::bind_method(D_METHOD("set_texture", "p_texture"),
                        &SpoutOutput::set_texture);
+  ClassDB::bind_method(D_METHOD("is_enabled"), &SpoutOutput::is_enabled);
+  ClassDB::bind_method(D_METHOD("set_enabled", "enabled"),
+                       &SpoutOutput::set_enabled);
+  ClassDB::bind_method(D_METHOD("is_active_in_editor"),
+                       &SpoutOutput::is_active_in_editor);
+  ClassDB::bind_method(D_METHOD("set_active_in_editor", "active"),
+                       &SpoutOutput::set_active_in_editor);
+  ClassDB::bind_method(D_METHOD("get_format"), &SpoutOutput::get_format);
+  ClassDB::bind_method(D_METHOD("set_format", "format"),
+                       &SpoutOutput::set_format);
+  ClassDB::bind_method(D_METHOD("get_flip_y"), &SpoutOutput::get_flip_y);
+  ClassDB::bind_method(D_METHOD("set_flip_y", "flip"),
+                       &SpoutOutput::set_flip_y);
+  ClassDB::bind_method(D_METHOD("get_alpha_mode"),
+                       &SpoutOutput::get_alpha_mode);
+  ClassDB::bind_method(D_METHOD("set_alpha_mode", "mode"),
+                       &SpoutOutput::set_alpha_mode);
+  ClassDB::bind_method(D_METHOD("get_color_conversion"),
+                       &SpoutOutput::get_color_conversion);
+  ClassDB::bind_method(D_METHOD("set_color_conversion", "conversion"),
+                       &SpoutOutput::set_color_conversion);
+  ClassDB::bind_method(D_METHOD("get_max_fps"), &SpoutOutput::get_max_fps);
+  ClassDB::bind_method(D_METHOD("set_max_fps", "fps"),
+                       &SpoutOutput::set_max_fps);
+
+  ClassDB::bind_method(D_METHOD("is_sending"), &SpoutOutput::is_sending);
+  ClassDB::bind_method(D_METHOD("get_active_sender_name"),
+                       &SpoutOutput::get_active_sender_name);
+  ClassDB::bind_method(D_METHOD("get_sender_size"),
+                       &SpoutOutput::get_sender_size);
+  ClassDB::bind_method(D_METHOD("get_last_send_cpu_usec"),
+                       &SpoutOutput::get_last_send_cpu_usec);
+  ClassDB::bind_method(D_METHOD("get_frames_sent"),
+                       &SpoutOutput::get_frames_sent);
+  ClassDB::bind_method(D_METHOD("get_frames_skipped"),
+                       &SpoutOutput::get_frames_skipped);
+  ClassDB::bind_method(D_METHOD("get_adapter_name"),
+                       &SpoutOutput::get_adapter_name);
 
   // Add properties
   ClassDB::add_property("SpoutOutput", {Variant::STRING, "channel_name"},
@@ -23,9 +62,66 @@ void SpoutOutput::_bind_methods() {
       "SpoutOutput",
       {Variant::OBJECT, "texture", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D"},
       "set_texture", "get_texture");
+  ClassDB::add_property("SpoutOutput", {Variant::BOOL, "enabled"},
+                        "set_enabled", "is_enabled");
+  ClassDB::add_property("SpoutOutput", {Variant::BOOL, "active_in_editor"},
+                        "set_active_in_editor", "is_active_in_editor");
+  ClassDB::add_property(
+      "SpoutOutput",
+      {Variant::INT, "format", PROPERTY_HINT_ENUM, "Auto,RGBA8,RGBA16F"},
+      "set_format", "get_format");
+  ClassDB::add_property("SpoutOutput", {Variant::BOOL, "flip_y"}, "set_flip_y",
+                        "get_flip_y");
+  ClassDB::add_property(
+      "SpoutOutput",
+      {Variant::INT, "alpha_mode", PROPERTY_HINT_ENUM, "Keep,Opaque"},
+      "set_alpha_mode", "get_alpha_mode");
+  ClassDB::add_property("SpoutOutput",
+                        {Variant::INT, "color_conversion", PROPERTY_HINT_ENUM,
+                         "None,Linear to sRGB,sRGB to Linear"},
+                        "set_color_conversion", "get_color_conversion");
+  ClassDB::add_property("SpoutOutput",
+                        {Variant::FLOAT, "max_fps", PROPERTY_HINT_RANGE,
+                         "0,240,0.1,or_greater,suffix:FPS"},
+                        "set_max_fps", "get_max_fps");
+
+  BIND_ENUM_CONSTANT(FORMAT_AUTO);
+  BIND_ENUM_CONSTANT(FORMAT_RGBA8);
+  BIND_ENUM_CONSTANT(FORMAT_RGBA16F);
+  BIND_ENUM_CONSTANT(ALPHA_KEEP);
+  BIND_ENUM_CONSTANT(ALPHA_OPAQUE);
+  BIND_ENUM_CONSTANT(COLOR_NONE);
+  BIND_ENUM_CONSTANT(COLOR_LINEAR_TO_SRGB);
+  BIND_ENUM_CONSTANT(COLOR_SRGB_TO_LINEAR);
+
+  ADD_SIGNAL(MethodInfo("sender_started",
+                        PropertyInfo(Variant::STRING, "sender_name")));
+  ADD_SIGNAL(MethodInfo("sender_stopped",
+                        PropertyInfo(Variant::STRING, "sender_name")));
+  ADD_SIGNAL(MethodInfo("sender_resized",
+                        PropertyInfo(Variant::STRING, "sender_name"),
+                        PropertyInfo(Variant::VECTOR2I, "size")));
 }
 
-SpoutOutput::SpoutOutput() : Node() { _core.set_name(_channel_name); }
+SpoutOutput::SpoutOutput() : Node() {
+  _core.set_name(_channel_name);
+  // Events are reported on the render thread; signals are emitted on the
+  // main thread through call_deferred.
+  _core.set_event_handler([this](SpoutSenderCore::Event p_event,
+                                 const String &p_name) {
+    switch (p_event) {
+    case SpoutSenderCore::EVENT_STARTED:
+      call_deferred("emit_signal", "sender_started", p_name);
+      break;
+    case SpoutSenderCore::EVENT_STOPPED:
+      call_deferred("emit_signal", "sender_stopped", p_name);
+      break;
+    case SpoutSenderCore::EVENT_RESIZED:
+      call_deferred("emit_signal", "sender_resized", p_name, _core.get_size());
+      break;
+    }
+  });
+}
 
 SpoutOutput::~SpoutOutput() { _stop(); }
 
@@ -46,10 +142,81 @@ void SpoutOutput::set_texture(Ref<Texture2D> p_texture) {
   _core.set_texture(p_texture);
 }
 
+void SpoutOutput::set_enabled(bool p_enabled) {
+  _enabled = p_enabled;
+  // Disabling unregisters the sender at the next frame but keeps the GPU
+  // resources, so enabling again is instant.
+  _core.set_enabled(p_enabled);
+}
+
+void SpoutOutput::set_active_in_editor(bool p_active) {
+  _active_in_editor = p_active;
+  _update_running();
+}
+
+void SpoutOutput::set_format(Format p_format) {
+  _format = p_format;
+  _core.set_format(static_cast<SpoutSendFormat>(p_format));
+}
+
+void SpoutOutput::set_flip_y(bool p_flip) {
+  _flip_y = p_flip;
+  _apply_options();
+}
+
+void SpoutOutput::set_alpha_mode(AlphaMode p_mode) {
+  _alpha_mode = p_mode;
+  _apply_options();
+}
+
+void SpoutOutput::set_color_conversion(ColorConversion p_conversion) {
+  _color_conversion = p_conversion;
+  _apply_options();
+}
+
+void SpoutOutput::set_max_fps(double p_fps) {
+  _max_fps = p_fps > 0.0 ? p_fps : 0.0;
+  _core.set_max_fps(_max_fps);
+}
+
+void SpoutOutput::_apply_options() {
+  SpoutBlitOptions options;
+  options.flip_y = _flip_y;
+  options.force_opaque = _alpha_mode == ALPHA_OPAQUE;
+  options.color = static_cast<SpoutColorConversion>(_color_conversion);
+  _core.set_blit_options(options);
+}
+
+bool SpoutOutput::is_sending() const { return _core.is_sending(); }
+
+String SpoutOutput::get_active_sender_name() const {
+  return _core.get_active_name();
+}
+
+Vector2i SpoutOutput::get_sender_size() const {
+  return _core.is_sending() ? _core.get_size() : Vector2i();
+}
+
+int64_t SpoutOutput::get_last_send_cpu_usec() const {
+  return static_cast<int64_t>(_core.get_last_cpu_usec());
+}
+
+int64_t SpoutOutput::get_frames_sent() const {
+  return static_cast<int64_t>(_core.get_frames_sent());
+}
+
+int64_t SpoutOutput::get_frames_skipped() const {
+  return static_cast<int64_t>(_core.get_frames_skipped());
+}
+
+String SpoutOutput::get_adapter_name() const {
+  return _core.get_adapter_name();
+}
+
 void SpoutOutput::_notification(int p_what) {
   switch (p_what) {
   case NOTIFICATION_ENTER_TREE:
-    _start();
+    _update_running();
     break;
   case NOTIFICATION_EXIT_TREE:
   case NOTIFICATION_PREDELETE:
@@ -57,6 +224,21 @@ void SpoutOutput::_notification(int p_what) {
     break;
   default:
     break;
+  }
+}
+
+bool SpoutOutput::_should_run() const {
+  if (!is_inside_tree()) {
+    return false;
+  }
+  return _active_in_editor || !Engine::get_singleton()->is_editor_hint();
+}
+
+void SpoutOutput::_update_running() {
+  if (_should_run()) {
+    _start();
+  } else {
+    _stop();
   }
 }
 
