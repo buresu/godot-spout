@@ -164,6 +164,10 @@ void godot::spout_log(const String &p_message) {
   }
 }
 
+void godot::spout_info(const String &p_message) {
+  UtilityFunctions::print("[godot-spout] ", p_message);
+}
+
 void godot::spout_warn(const String &p_message) {
   UtilityFunctions::push_warning("[godot-spout] " + p_message);
 }

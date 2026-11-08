@@ -153,7 +153,8 @@ SpoutD3D11Device::get_on12(ID3D12Device *p_device, IUnknown *p_queue) {
       adapter_name_for_luid(luid_to_u64(p_device->GetAdapterLuid()));
   result->init_debug(p_device);
   s_on12_devices[p_device] = result;
-  spout_log("Created D3D11On12 device on " + result->_adapter_name);
+  spout_info("Sharing textures through D3D11On12 on " + result->_adapter_name +
+             " (D3D12).");
   return result;
 }
 
@@ -215,7 +216,8 @@ SpoutD3D11Device::get_for_luid(uint64_t p_luid) {
       String(reinterpret_cast<const char16_t *>(desc.Description));
   result->init_debug(nullptr);
   s_luid_devices[p_luid] = result;
-  spout_log("Created D3D11 device on " + result->_adapter_name);
+  spout_info("Sharing textures through D3D11 on " + result->_adapter_name +
+             " (Vulkan interop).");
   return result;
 }
 

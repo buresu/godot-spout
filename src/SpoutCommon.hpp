@@ -83,6 +83,8 @@ bool spout_env_flag(const char *p_name);
 void spout_diagnostics_init();
 
 void spout_log(const String &p_message);
+// Always printed (one-off facts users need for bug reports, e.g. the GPU).
+void spout_info(const String &p_message);
 void spout_warn(const String &p_message);
 void spout_error(const String &p_message);
 
