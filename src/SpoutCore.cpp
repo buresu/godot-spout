@@ -281,11 +281,18 @@ void SpoutSenderCore::send_gl() {
     _driver = "opengl3";
   }
   RenderingServer *server = rs();
-  const uint64_t handle =
-      server->texture_get_native_handle(_texture->get_rid(), false);
+  const uint64_t handle = server->texture_get_native_handle(
+      _gl_source.is_valid() ? _gl_source : _texture->get_rid(), false);
   const uint32_t width = static_cast<uint32_t>(_texture->get_width());
   const uint32_t height = static_cast<uint32_t>(_texture->get_height());
   if (handle == 0 || width == 0 || height == 0) {
+    if (_last_error.is_empty()) {
+      _last_error = "OpenGL: texture not ready (handle " +
+                    String::num_int64(handle) + ", " +
+                    String::num_int64(width) + "x" + String::num_int64(height) +
+                    ")";
+      spout_log("SpoutOutput \"" + _name + "\": " + _last_error);
+    }
     return;
   }
   const bool was_registered = _gl->is_registered();
@@ -295,6 +302,7 @@ void SpoutSenderCore::send_gl() {
   if (renamed) {
     emit(EVENT_STOPPED, old_name);
   }
+  _last_error = String();
   if (_gl->send(handle, width, height, _name, _options.flip_y)) {
     if (!was_registered || renamed) {
       emit(EVENT_STARTED, _gl->get_name());
@@ -305,7 +313,9 @@ void SpoutSenderCore::send_gl() {
     _height = height;
     _frames_sent++;
   } else {
-    _frames_skipped++;
+    if (_frames_skipped++ == 0) {
+      spout_log("SpoutOutput \"" + _name + "\": SpoutGL SendTexture failed.");
+    }
   }
 #endif
 }

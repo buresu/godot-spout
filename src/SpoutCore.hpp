@@ -68,6 +68,10 @@ public:
     _options = p_options;
   }
   void set_max_fps(double p_fps) { _max_fps = p_fps; }
+  // OpenGL only: RenderingServer texture to read the GL texture name from,
+  // when _texture itself has none (a ViewportTexture's proxy; see
+  // SpoutOutput::_resolve_gl_source).
+  void set_gl_source(const RID &p_texture) { _gl_source = p_texture; }
 
   // Per frame, from RenderingServer's frame_post_draw.
   void on_frame_post_draw();
@@ -94,6 +98,7 @@ private:
 
   EventHandler _events;
   Ref<Texture2D> _texture;
+  RID _gl_source;
   String _name = "godot-spout";
   bool _enabled = true;
   SpoutSendFormat _format = SPOUT_SEND_FORMAT_AUTO;
