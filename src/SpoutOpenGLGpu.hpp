@@ -43,4 +43,12 @@ private:
 
 } // namespace godot
 
+#else
+
+namespace godot {
+// Stub so SpoutSenderCore's std::unique_ptr<SpoutGLSender> member can be
+// destroyed when the OpenGL backend is not built.
+class SpoutGLSender {};
+} // namespace godot
+
 #endif // GODOT_SPOUT_ENABLE_OPENGL
