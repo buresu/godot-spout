@@ -8,7 +8,7 @@
 // outside. Godot copies (or runs a compute pass) into a texture *we* created,
 // and only that texture is shared with D3D11 / Spout. This keeps Godot's
 // resource-state / image-layout tracking correct, which the previous code
-// broke (see docs/IMPLEMENTATION_PLAN.md, B3 and B7).
+// broke.
 
 #include <cstdint>
 

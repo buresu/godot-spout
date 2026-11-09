@@ -1,7 +1,7 @@
 extends SceneTree
 ## Lifecycle test: changes scenes repeatedly between the Spout demo scenes,
 ## then quits while a SpoutTexture is still referenced from a static variable
-## (it outlives the scene tree; plan bug B10). Checks video memory growth and
+## (it outlives the scene tree). Checks video memory growth and
 ## that the process exits cleanly (exit code 0, no crash).
 ##
 ## Usage: godot --path demo --rendering-driver d3d12 -s res://tests/lifecycle_test.gd -- [--cycles=30]

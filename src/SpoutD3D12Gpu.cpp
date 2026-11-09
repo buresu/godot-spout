@@ -58,7 +58,7 @@ using namespace godot;
 //   left the texture in (see state_for()), so its bookkeeping stays true. One
 //   wrapped resource is kept per state because states are fixed at wrap time.
 //   This path is not exercised on the development machine (it has enhanced
-//   barriers); see docs/EXECUTION_TRACKER.md.
+//   barriers).
 //
 // Cross-process sync with receivers/senders is Spout's: the access mutex
 // around the copy, and DXGI's implicit synchronisation of legacy shared
@@ -353,7 +353,7 @@ bool SpoutD3D12Receiver::open(const SpoutSenderInfo &p_info, String &r_error) {
 
   // Same memory layout as the sender's texture so D3D11 CopyResource is
   // valid. (The old code always used BGRA8, which is an invalid copy from
-  // RGBA8 / RGBA16F senders; plan bug B4.)
+  // RGBA8 / RGBA16F senders.)
   _source = create_texture(_rd, desc.Width, desc.Height, _source_format, dxgi,
                            false, &_owned, &_simultaneous);
   if (!_source.is_valid()) {
