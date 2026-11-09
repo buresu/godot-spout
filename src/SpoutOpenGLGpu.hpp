@@ -6,7 +6,7 @@
 // SpoutGpuSender interface: SpoutGL's Spout class does everything (GL/DX
 // interop when the driver supports WGL_NV_DX_interop, otherwise a CPU
 // readback, which SpoutGL picks on its own). Receiving on OpenGL is not
-// implemented (plan P2-1).
+// implemented.
 
 #ifdef GODOT_SPOUT_ENABLE_OPENGL
 

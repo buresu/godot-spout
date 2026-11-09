@@ -31,7 +31,7 @@ using namespace godot;
 //   * Sender: Godot copies the viewport into the imported image itself, inside
 //     its own frame graph, with its own barriers. No private command buffers,
 //     no vkQueueSubmit from us, no vkDeviceWaitIdle / fence waits (the old
-//     code did both every frame, ~5 ms; plan bugs B7/B8).
+//     code did both every frame, ~5 ms).
 //   * Receiver: Godot copies (or samples) the imported image of the sender's
 //     texture into the texture materials use.
 //
@@ -335,7 +335,7 @@ SpoutVulkanSender::SpoutVulkanSender(RenderingDevice *p_rd) : _rd(p_rd) {
     return;
   }
   // The D3D11 device must be on the same GPU as Godot's Vulkan device, or the
-  // shared texture's memory can't be imported (plan bug B13).
+  // shared texture's memory can't be imported.
   _d3d11 = SpoutD3D11Device::get_for_luid(luid);
   _usable = _d3d11 != nullptr;
 }

@@ -233,7 +233,7 @@ bool SpoutD3D11Device::create_shared_texture(uint32_t p_width,
   desc.ArraySize = 1;
   // Always a typed format. Godot's D3D12 render targets are TYPELESS, and the
   // old code copied that format into the shared texture, so receivers were
-  // offered e.g. R8G8B8A8_TYPELESS (plan bug B9).
+  // offered e.g. R8G8B8A8_TYPELESS.
   desc.Format = static_cast<DXGI_FORMAT>(p_dxgi_format);
   desc.SampleDesc.Count = 1;
   desc.Usage = D3D11_USAGE_DEFAULT;

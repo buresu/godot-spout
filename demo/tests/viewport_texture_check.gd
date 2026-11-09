@@ -1,5 +1,5 @@
 extends SceneTree
-## Checks the cause of known issue 1 (plan bug B12): the ViewportTexture that
+## Checks the cause of known issue 1: the ViewportTexture that
 ## output_demo.gd preloads is not the scene's own (local-to-scene) copy, so it
 ## never resolves to the SubViewport and keeps pointing at a placeholder.
 ##

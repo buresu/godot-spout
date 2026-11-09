@@ -10,12 +10,12 @@
 //     command queue. Its work is submitted to Godot's queue, so GPU ordering
 //     with Godot's frames is the queue's submission order.
 //   * Vulkan driver: a plain D3D11 device on the DXGI adapter whose LUID
-//     matches Godot's VkPhysicalDevice (fixes plan bug B13; spoutVK always used
+//     matches Godot's VkPhysicalDevice (SpoutVK always used
 //     the system default adapter).
 //
 // One device is shared by all senders and receivers (one D3D11On12 device per
-// node was heavyweight and was re-created every frame while a receiver waited,
-// plan bug B1). Devices are reference counted with shared_ptr and destroyed
+// node was heavyweight and was re-created every frame while a receiver waited).
+// Devices are reference counted with shared_ptr and destroyed
 // when the last user releases them.
 
 #include <cstdint>

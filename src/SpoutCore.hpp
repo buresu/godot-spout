@@ -7,7 +7,7 @@
 // A core owns its GPU backend for as long as the node is active. Failures
 // never destroy it; the core waits and retries with a back-off (the old code
 // destroyed and re-created the backend every frame while a receiver had no
-// sender, plan bug B1).
+// sender).
 //
 // Threading: on_frame_*() must run on the render thread (the Godot classes
 // take care of that). Events are reported through a callback; the Godot
@@ -35,7 +35,7 @@ class SpoutGLSender;
 
 // True while Godot's RenderingServer exists. Destructors check this before
 // touching it (a SpoutTexture resource can outlive the RenderingServer when
-// a script constant holds it; plan bug B10).
+// a script constant holds it).
 bool spout_rendering_available();
 
 class SpoutCoreBase {
