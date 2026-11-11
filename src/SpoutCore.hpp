@@ -9,16 +9,19 @@
 // destroyed and re-created the backend every frame while a receiver had no
 // sender).
 //
-// Threading: on_frame_*() must run on the render thread (the Godot classes
-// take care of that). Events are reported through a callback; the Godot
-// classes turn them into deferred signal emissions.
+// Threading: RenderingDevice may only be used on the render thread, but with
+// the multi-threaded renderer RenderingServer emits frame_pre/post_draw on the
+// main thread. So the scheduler (spout_core_start/stop) runs on_frame_*() and
+// release() on the render thread, setters/getters go through mutex-guarded
+// settings/status copies, and owner callbacks stop after detach().
 
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 
 #include <godot_cpp/classes/rendering_device.hpp>
-#include <godot_cpp/classes/texture2d.hpp>
+#include <godot_cpp/classes/texture2drd.hpp>
 #include <godot_cpp/variant/rid.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
@@ -38,73 +41,114 @@ class SpoutGLSender;
 // a script constant holds it).
 bool spout_rendering_available();
 
+bool spout_is_main_thread();
+
+// Texture2DRD emits "changed" on the render thread, which scene nodes reject;
+// this re-emits it on the main thread.
+void spout_set_texture_rd(Texture2DRD *p_texture, const RID &p_rid);
+
 class SpoutCoreBase {
 public:
-  SpoutCoreBase();
-  virtual ~SpoutCoreBase();
+  virtual ~SpoutCoreBase() = default;
+
+  virtual void on_frame_pre_draw() {}
+  virtual void on_frame_post_draw() {}
   // Frees GPU resources and unregisters from Spout. The core can be used
   // again afterwards (it re-creates everything lazily).
   virtual void release() = 0;
-  // Called once at module shutdown for cores that are still alive.
-  static void release_all();
+
+  // Stops owner callbacks; p_last runs under the same lock. Call before the
+  // owner is destroyed.
+  void detach(const std::function<void()> &p_last = nullptr);
+
+protected:
+  template <typename F> void with_owner(F &&p_fn) {
+    std::lock_guard<std::mutex> guard(_owner_lock);
+    if (!_detached) {
+      p_fn();
+    }
+  }
+
+private:
+  std::mutex _owner_lock;
+  bool _detached = false; // guarded by _owner_lock
 };
+
+void spout_core_start(const std::shared_ptr<SpoutCoreBase> &p_core);
+// Also releases the core on the render thread.
+void spout_core_stop(const std::shared_ptr<SpoutCoreBase> &p_core);
+// Releases all cores on the render thread and waits for it.
+void spout_cores_shutdown();
 
 class SpoutSenderCore : public SpoutCoreBase {
 public:
   enum Event { EVENT_STARTED, EVENT_STOPPED, EVENT_RESIZED };
-  using EventHandler = std::function<void(Event, const String &)>;
+  using EventHandler =
+      std::function<void(Event, const String &, const Vector2i &)>;
+
+  struct Status {
+    bool sending = false;
+    String active_name;
+    Vector2i size;
+    uint64_t last_cpu_usec = 0;
+    uint64_t frames_sent = 0;
+    uint64_t frames_skipped = 0;
+    String adapter_name;
+  };
 
   SpoutSenderCore();
   ~SpoutSenderCore() override;
 
+  // Set once, before spout_core_start().
   void set_event_handler(EventHandler p_handler) { _events = p_handler; }
 
-  // Settings; all can change at any time.
-  void set_texture(const Ref<Texture2D> &p_texture) { _texture = p_texture; }
-  void set_name(const String &p_name) { _name = p_name; }
-  void set_enabled(bool p_enabled) { _enabled = p_enabled; }
-  void set_format(SpoutSendFormat p_format) { _format = p_format; }
-  void set_blit_options(const SpoutBlitOptions &p_options) {
-    _options = p_options;
-  }
-  void set_max_fps(double p_fps) { _max_fps = p_fps; }
-  // OpenGL only: RenderingServer texture to read the GL texture name from,
-  // when _texture itself has none (a ViewportTexture's proxy; see
-  // SpoutOutput::_resolve_gl_source).
-  void set_gl_source(const RID &p_texture) { _gl_source = p_texture; }
+  void set_texture(const RID &p_texture);
+  void set_name(const String &p_name);
+  void set_enabled(bool p_enabled);
+  void set_format(SpoutSendFormat p_format);
+  void set_blit_options(const SpoutBlitOptions &p_options);
+  void set_max_fps(double p_fps);
+  // OpenGL only (see SpoutOutput::_resolve_gl_source).
+  void set_gl_source(const RID &p_texture, const Vector2i &p_size);
 
-  // Per frame, from RenderingServer's frame_post_draw.
-  void on_frame_post_draw();
+  void on_frame_post_draw() override;
   void release() override;
 
-  bool is_sending() const;
-  String get_active_name() const;
-  Vector2i get_size() const { return Vector2i(_width, _height); }
-  uint64_t get_last_cpu_usec() const { return _last_cpu_usec; }
-  uint64_t get_frames_sent() const { return _frames_sent; }
-  uint64_t get_frames_skipped() const { return _frames_skipped; }
-  String get_adapter_name() const;
+  Status get_status() const;
 
 private:
+  struct Settings {
+    RID texture;
+    RID gl_source;
+    Vector2i gl_size;
+    String name = "godot-spout";
+    bool enabled = true;
+    SpoutSendFormat format = SPOUT_SEND_FORMAT_AUTO;
+    SpoutBlitOptions options;
+    double max_fps = 0.0;
+  };
+
+  void process_frame();
+  void release_resources();
+  void update_status();
+  bool is_sending() const;
+  String get_active_name() const;
   void stop();
   void publish_pending();
   void send_gl();
   void fail(const String &p_message);
-  void emit(Event p_event, const String &p_name) {
-    if (_events) {
-      _events(p_event, p_name);
-    }
-  }
+  void emit(Event p_event, const String &p_name);
 
   EventHandler _events;
-  Ref<Texture2D> _texture;
-  RID _gl_source;
-  String _name = "godot-spout";
-  bool _enabled = true;
-  SpoutSendFormat _format = SPOUT_SEND_FORMAT_AUTO;
-  SpoutBlitOptions _options;
-  double _max_fps = 0.0;
 
+  mutable std::mutex _settings_lock;
+  Settings _settings; // guarded by _settings_lock
+
+  mutable std::mutex _status_lock;
+  Status _status; // guarded by _status_lock
+
+  // Everything below is only touched on the render thread.
+  Settings _cur; // this frame's copy of _settings
   String _driver;
   RenderingDevice *_rd = nullptr;
   std::unique_ptr<SpoutGpuSender> _gpu;
@@ -136,57 +180,79 @@ public:
     STATE_ERROR,     // sender found but its texture can't be used
   };
   enum Event { EVENT_CONNECTED, EVENT_DISCONNECTED, EVENT_FRAME, EVENT_ERROR };
+  // The string is the sender name, or the message for EVENT_ERROR.
   using EventHandler = std::function<void(Event, const String &)>;
-  // Called when the RD texture that should be shown changes (RID() = none).
+  // Must switch synchronously: the previous texture is freed right after.
   using TextureHandler = std::function<void(const RID &)>;
+
+  struct Status {
+    State state = STATE_IDLE;
+    String sender_name;
+    Vector2i sender_size;
+    uint32_t sender_dxgi_format = 0;
+    double sender_fps = 0.0;
+    int64_t sender_frame = 0;
+    uint64_t frames_received = 0;
+    String adapter_name;
+    String last_error;
+  };
 
   SpoutReceiverCore();
   ~SpoutReceiverCore() override;
 
+  // Set once, before spout_core_start().
   void set_event_handler(EventHandler p_handler) { _events = p_handler; }
   void set_texture_handler(TextureHandler p_handler) { _texture = p_handler; }
 
   void set_name(const String &p_name);
-  void set_enabled(bool p_enabled) { _enabled = p_enabled; }
-  void set_flip_y(bool p_flip) { _options.flip_y = p_flip; }
-  void set_clear_on_disconnect(bool p_clear) { _clear_on_disconnect = p_clear; }
-  void set_poll_interval_msec(uint32_t p_msec) { _poll_interval = p_msec; }
+  void set_enabled(bool p_enabled);
+  void set_flip_y(bool p_flip);
+  void set_clear_on_disconnect(bool p_clear);
+  void set_poll_interval_msec(uint32_t p_msec);
+  // SpoutInput.texture
+  void set_target(const Ref<Texture2DRD> &p_target);
 
-  // Per frame, from RenderingServer's frame_pre_draw.
-  void on_frame_pre_draw();
+  void on_frame_pre_draw() override;
   void release() override;
 
-  State get_state() const { return _state; }
-  bool is_connected() const { return _state == STATE_CONNECTED; }
-  String get_sender_name() const;
-  Vector2i get_sender_size() const;
-  uint32_t get_sender_dxgi_format() const;
-  double get_sender_fps() const;
-  int64_t get_sender_frame() const;
-  uint64_t get_frames_received() const { return _frames_received; }
-  RID get_visible_texture() const { return _shown; }
-  String get_adapter_name() const;
-  String get_last_error() const { return _last_error; }
+  Status get_status() const;
 
 private:
+  struct Settings {
+    String name;
+    uint64_t name_serial = 0; // bumped whenever name changes
+    bool enabled = true;
+    bool clear_on_disconnect = false;
+    SpoutBlitOptions options;
+    uint32_t poll_interval = 250;
+    Ref<Texture2DRD> target;
+  };
+
+  void read_settings();
+  void process_frame();
+  void release_resources();
+  void update_status();
+  String get_sender_name() const;
   void disconnect(bool p_emit);
   bool connect_to(const SpoutSenderInfo &p_info);
   bool ensure_visible();
+  void update_target();
   void show(const RID &p_rid);
-  void emit(Event p_event, const String &p_name) {
-    if (_events) {
-      _events(p_event, p_name);
-    }
-  }
+  void clear_shown();
+  void emit(Event p_event, const String &p_arg);
 
   EventHandler _events;
   TextureHandler _texture;
-  String _name;
-  bool _enabled = true;
-  bool _clear_on_disconnect = false;
-  SpoutBlitOptions _options;
-  uint32_t _poll_interval = 250;
 
+  mutable std::mutex _settings_lock;
+  Settings _settings; // guarded by _settings_lock
+
+  mutable std::mutex _status_lock;
+  Status _status; // guarded by _status_lock
+
+  // Everything below is only touched on the render thread.
+  Settings _cur; // this frame's copy of _settings
+  Ref<Texture2DRD> _target;
   String _driver;
   RenderingDevice *_rd = nullptr;
   std::unique_ptr<SpoutGpuReceiver> _gpu;
@@ -195,7 +261,7 @@ private:
 
   State _state = STATE_IDLE;
   RID _visible; // written this connection
-  RID _shown;   // handed to the Texture2DRD
+  RID _shown;   // shown by the target / owner
   RenderingDevice::DataFormat _visible_format =
       RenderingDevice::DATA_FORMAT_MAX;
   bool _visible_flip = false;

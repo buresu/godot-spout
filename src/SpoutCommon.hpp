@@ -94,11 +94,12 @@ uint64_t spout_ticks_msec();
 // Runs p_release once Godot has drawn SPOUT_RELEASE_DELAY_FRAMES more frames.
 // Used for GPU objects we own (D3D12 resources, Vulkan images) whose RD view
 // was just freed: the frame Godot is recording, and the ones in flight, may
-// still reference them. Never waits. Pending releases are pumped from
-// RenderingServer's frame_post_draw; whatever is left at module shutdown is
-// left to the OS (the process is exiting).
+// still reference them. Never waits. Pending releases are pumped on the render
+// thread after each frame; whatever is left at module shutdown is left to the
+// OS (the process is exiting).
 constexpr int SPOUT_RELEASE_DELAY_FRAMES = 4;
 void spout_defer_release(std::function<void()> p_release);
+void spout_pump_deferred_releases();
 void spout_deferred_release_shutdown();
 
 } // namespace godot

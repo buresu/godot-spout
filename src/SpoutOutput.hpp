@@ -69,13 +69,12 @@ private:
   void _update_running();
   void _start();
   void _stop();
-  void _on_frame_post_draw();
-  void _process_frame();
   void _apply_options();
+  void _sync_source();
   void _resolve_gl_source();
 
-  SpoutSenderCore _core;
-  bool _connected = false;
+  std::shared_ptr<SpoutSenderCore> _core;
+  bool _running = false;
   // OpenGL: the viewport whose render target backs _texture, if any.
   ObjectID _gl_viewport;
   uint64_t _gl_resolve_at_msec = 0;

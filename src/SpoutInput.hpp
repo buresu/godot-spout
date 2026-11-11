@@ -41,12 +41,9 @@ private:
   void _update_running();
   void _start();
   void _stop();
-  void _on_frame_pre_draw();
-  void _process_frame();
-  void _show(const RID &p_rid);
 
-  SpoutReceiverCore _core;
-  bool _connected = false;
+  std::shared_ptr<SpoutReceiverCore> _core;
+  bool _running = false;
 
   // Properties
   String _channel_name;

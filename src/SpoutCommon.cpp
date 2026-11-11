@@ -192,9 +192,10 @@ struct DeferredRelease {
 };
 std::mutex s_deferred_lock;
 std::vector<DeferredRelease> s_deferred;
-bool s_pump_connected = false;
 
-void pump_deferred_releases() {
+} // namespace
+
+void godot::spout_pump_deferred_releases() {
   std::vector<std::function<void()>> due;
   {
     std::lock_guard<std::mutex> guard(s_deferred_lock);
@@ -214,30 +215,16 @@ void pump_deferred_releases() {
   }
 }
 
-} // namespace
-
 void godot::spout_defer_release(std::function<void()> p_release) {
   std::lock_guard<std::mutex> guard(s_deferred_lock);
   s_deferred.push_back(
       {std::move(p_release), Engine::get_singleton()->get_frames_drawn() +
                                  SPOUT_RELEASE_DELAY_FRAMES});
-  if (!s_pump_connected) {
-    // Stays connected for the rest of the run; pumping an empty list is free.
-    RenderingServer::get_singleton()->connect(
-        "frame_post_draw", callable_mp_static(&pump_deferred_releases));
-    s_pump_connected = true;
-  }
 }
 
 void godot::spout_deferred_release_shutdown() {
-  pump_deferred_releases();
+  spout_pump_deferred_releases();
   std::lock_guard<std::mutex> guard(s_deferred_lock);
-  if (s_pump_connected &&
-      Engine::get_singleton()->has_singleton("RenderingServer")) {
-    RenderingServer::get_singleton()->disconnect(
-        "frame_post_draw", callable_mp_static(&pump_deferred_releases));
-  }
-  s_pump_connected = false;
   // Not released: may still be referenced by the last submitted frames.
   s_deferred.clear();
 }

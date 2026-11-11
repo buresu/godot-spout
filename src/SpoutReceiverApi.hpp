@@ -25,20 +25,19 @@ inline void spout_receiver_validate_channel(PropertyInfo &p_property) {
 // Forwards core events to signals, emitted on the main thread.
 template <typename T> void spout_receiver_connect_events(T *p_owner) {
   p_owner->core().set_event_handler(
-      [p_owner](SpoutReceiverCore::Event p_event, const String &p_name) {
+      [p_owner](SpoutReceiverCore::Event p_event, const String &p_arg) {
         switch (p_event) {
         case SpoutReceiverCore::EVENT_CONNECTED:
-          p_owner->call_deferred("emit_signal", "sender_connected", p_name);
+          p_owner->call_deferred("emit_signal", "sender_connected", p_arg);
           break;
         case SpoutReceiverCore::EVENT_DISCONNECTED:
-          p_owner->call_deferred("emit_signal", "sender_disconnected", p_name);
+          p_owner->call_deferred("emit_signal", "sender_disconnected", p_arg);
           break;
         case SpoutReceiverCore::EVENT_FRAME:
           p_owner->call_deferred("emit_signal", "frame_received");
           break;
         case SpoutReceiverCore::EVENT_ERROR:
-          p_owner->call_deferred("emit_signal", "receive_error",
-                                 p_owner->core().get_last_error());
+          p_owner->call_deferred("emit_signal", "receive_error", p_arg);
           break;
         }
       });
@@ -115,20 +114,26 @@ template <typename T> void spout_receiver_bind(const char *p_class) {
 
 // Status getters both receiver classes implement by forwarding to the core.
 #define SPOUT_RECEIVER_STATUS_METHODS                                          \
-  bool is_sender_connected() const { return _core.is_connected(); }            \
-  int get_receiver_state() const { return _core.get_state(); }                 \
-  String get_sender_name() const { return _core.get_sender_name(); }           \
-  Vector2i get_sender_size() const { return _core.get_sender_size(); }         \
+  bool is_sender_connected() const {                                           \
+    return _core->get_status().state == SpoutReceiverCore::STATE_CONNECTED;    \
+  }                                                                            \
+  int get_receiver_state() const { return _core->get_status().state; }         \
+  String get_sender_name() const { return _core->get_status().sender_name; }   \
+  Vector2i get_sender_size() const { return _core->get_status().sender_size; } \
   String get_sender_format() const {                                           \
-    return _core.is_connected() ? spout_dxgi_format_name(spout_dxgi_normalize( \
-                                      _core.get_sender_dxgi_format()))         \
-                                : String();                                    \
+    const SpoutReceiverCore::Status status = _core->get_status();              \
+    return status.state == SpoutReceiverCore::STATE_CONNECTED                  \
+               ? spout_dxgi_format_name(                                       \
+                     spout_dxgi_normalize(status.sender_dxgi_format))          \
+               : String();                                                     \
   }                                                                            \
-  double get_sender_fps() const { return _core.get_sender_fps(); }             \
-  int64_t get_sender_frame() const { return _core.get_sender_frame(); }        \
+  double get_sender_fps() const { return _core->get_status().sender_fps; }     \
+  int64_t get_sender_frame() const {                                           \
+    return _core->get_status().sender_frame;                                   \
+  }                                                                            \
   int64_t get_frames_received() const {                                        \
-    return static_cast<int64_t>(_core.get_frames_received());                  \
+    return static_cast<int64_t>(_core->get_status().frames_received);          \
   }                                                                            \
-  String get_adapter_name() const { return _core.get_adapter_name(); }         \
-  String get_last_error() const { return _core.get_last_error(); }             \
-  SpoutReceiverCore &core() { return _core; }
+  String get_adapter_name() const { return _core->get_status().adapter_name; } \
+  String get_last_error() const { return _core->get_status().last_error; }     \
+  SpoutReceiverCore &core() { return *_core; }

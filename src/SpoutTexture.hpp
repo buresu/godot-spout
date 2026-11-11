@@ -30,15 +30,15 @@ public:
 
 protected:
   static void _bind_methods();
+  void _notification(int p_what);
   void _validate_property(PropertyInfo &p_property) const;
 
 private:
-  void _on_frame_pre_draw();
-  void _process_frame();
-  void _show(const RID &p_rid);
+  void _apply_enabled();
+  void _shutdown();
 
-  SpoutReceiverCore _core;
-  bool _connected = false;
+  std::shared_ptr<SpoutReceiverCore> _core;
+  bool _running = false;
 
   // Properties
   String _channel_name;
