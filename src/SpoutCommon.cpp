@@ -10,7 +10,7 @@
 #include <mutex>
 #include <vector>
 
-#include <SpoutUtils.h>
+#include <SpoutCommon.h>
 
 using namespace godot;
 
