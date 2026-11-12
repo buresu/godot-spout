@@ -45,7 +45,6 @@ RenderingDevice::DataFormat spout_dxgi_to_rd(uint32_t p_dxgi_format);
 
 // RGBA8 is R8G8B8A8_UNORM: BGRA8 isn't storable by the compute pass.
 uint32_t spout_send_format_to_dxgi(SpoutSendFormat p_format);
-RenderingDevice::DataFormat spout_send_format_to_rd(SpoutSendFormat p_format);
 
 SpoutSendFormat spout_resolve_send_format(SpoutSendFormat p_requested,
                                           RenderingDevice::DataFormat p_source);

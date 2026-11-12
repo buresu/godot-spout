@@ -30,7 +30,6 @@ using namespace godot;
 
 namespace {
 
-constexpr uint32_t MUTEX_TIMEOUT_MS = 4;
 // Bounded wait for a prefetched copy that isn't done yet.
 constexpr int64_t RECEIVE_WAIT_USEC = 2000;
 
@@ -112,13 +111,6 @@ std::shared_ptr<SpoutD3D11Device> get_d3d11(RenderingDevice *p_rd) {
     return nullptr;
   }
   return SpoutD3D11Device::get_for_luid(luid);
-}
-
-template <typename T> void safe_release(T *&p) {
-  if (p) {
-    p->Release();
-    p = nullptr;
-  }
 }
 
 // r_dedicated: the import needs a dedicated allocation.
@@ -234,10 +226,10 @@ void destroy_slots(RenderingDevice *p_rd, SlotList &p_slots) {
 std::unique_ptr<Slot> create_slot(RenderingDevice *p_rd,
                                   SpoutD3D11Device &p_d3d11, uint32_t p_width,
                                   uint32_t p_height, uint32_t p_dxgi_format,
-                                  RenderingDevice::DataFormat p_rd_format,
                                   String &r_error) {
   const VkContext vk = get_context(p_rd);
-  const VkFormat format = rd_to_vk(p_rd_format);
+  const RenderingDevice::DataFormat rd_format = spout_dxgi_to_rd(p_dxgi_format);
+  const VkFormat format = rd_to_vk(rd_format);
   if (format == VK_FORMAT_UNDEFINED) {
     r_error = "unsupported format";
     return nullptr;
@@ -269,7 +261,7 @@ std::unique_ptr<Slot> create_slot(RenderingDevice *p_rd,
   }
   D3D11_QUERY_DESC query_desc = {D3D11_QUERY_EVENT, 0};
   if (FAILED(p_d3d11.device()->CreateQuery(&query_desc, &slot->query))) {
-    safe_release(slot->texture);
+    spout_release(slot->texture);
     r_error = "could not create a D3D11 query";
     return nullptr;
   }
@@ -297,8 +289,8 @@ std::unique_ptr<Slot> create_slot(RenderingDevice *p_rd,
     if (slot->image) {
       vkDestroyImage(vk.device, slot->image, nullptr);
     }
-    safe_release(slot->query);
-    safe_release(slot->texture);
+    spout_release(slot->query);
+    spout_release(slot->texture);
     r_error = p_error;
     return nullptr;
   };
@@ -379,7 +371,7 @@ std::unique_ptr<Slot> create_slot(RenderingDevice *p_rd,
     rd_usage.set_flag(RenderingDevice::TEXTURE_USAGE_STORAGE_BIT);
   }
   slot->rid = p_rd->texture_create_from_extension(
-      RenderingDevice::TEXTURE_TYPE_2D, p_rd_format,
+      RenderingDevice::TEXTURE_TYPE_2D, rd_format,
       RenderingDevice::TEXTURE_SAMPLES_1, rd_usage,
       reinterpret_cast<uint64_t>(slot->image), p_width, p_height, 1, 1);
   if (!slot->rid.is_valid()) {
@@ -390,12 +382,11 @@ std::unique_ptr<Slot> create_slot(RenderingDevice *p_rd,
 
 bool create_slots(RenderingDevice *p_rd, SpoutD3D11Device &p_d3d11,
                   uint32_t p_width, uint32_t p_height, uint32_t p_dxgi_format,
-                  RenderingDevice::DataFormat p_rd_format, SlotList &r_slots,
-                  String &r_error) {
+                  SlotList &r_slots, String &r_error) {
   const uint32_t count = slot_count(p_rd);
   for (uint32_t i = 0; i < count; i++) {
-    std::unique_ptr<Slot> slot = create_slot(
-        p_rd, p_d3d11, p_width, p_height, p_dxgi_format, p_rd_format, r_error);
+    std::unique_ptr<Slot> slot =
+        create_slot(p_rd, p_d3d11, p_width, p_height, p_dxgi_format, r_error);
     if (!slot) {
       destroy_slots(p_rd, r_slots);
       return false;
@@ -446,8 +437,7 @@ bool SpoutVulkanSender::ensure(uint32_t p_width, uint32_t p_height,
 
   _dxgi_format = spout_send_format_to_dxgi(p_format);
   String error;
-  _shared = create_slot(_rd, *_d3d11, p_width, p_height, _dxgi_format,
-                        spout_send_format_to_rd(p_format), error);
+  _shared = create_slot(_rd, *_d3d11, p_width, p_height, _dxgi_format, error);
   if (!_shared) {
     spout_error("Vulkan sender: " + error + ".");
     _usable = false; // don't retry (and fail) every frame
@@ -496,32 +486,23 @@ bool SpoutVulkanReceiver::open(const SpoutSenderInfo &p_info, String &r_error) {
     r_error = "no D3D11 device on the Vulkan GPU";
     return false;
   }
-  if (!_d3d11->open_shared_texture(p_info.share_handle, &_shared, r_error)) {
+  uint32_t width = 0, height = 0, dxgi = 0;
+  if (!_d3d11->open_shared_texture(p_info.share_handle, &_shared, width, height,
+                                   dxgi, r_error)) {
     return false;
   }
-  // Advertised formats are sometimes wrong.
-  D3D11_TEXTURE2D_DESC desc = {};
-  _shared->GetDesc(&desc);
-  const uint32_t dxgi = spout_dxgi_normalize(desc.Format);
+  if (!create_slots(_rd, *_d3d11, width, height, dxgi, _slots, r_error)) {
+    close();
+    return false;
+  }
   _source_format = spout_dxgi_to_rd(dxgi);
-  if (_source_format == RenderingDevice::DATA_FORMAT_MAX) {
-    r_error =
-        "unsupported sender format " + spout_dxgi_format_name(desc.Format);
-    close();
-    return false;
-  }
-  if (!create_slots(_rd, *_d3d11, desc.Width, desc.Height, dxgi, _source_format,
-                    _slots, r_error)) {
-    close();
-    return false;
-  }
   _current = 0;
   return true;
 }
 
 void SpoutVulkanReceiver::close() {
   destroy_slots(_rd, _slots);
-  safe_release(_shared);
+  spout_release(_shared);
   _current = 0;
   _source_format = RenderingDevice::DATA_FORMAT_MAX;
 }
@@ -563,7 +544,7 @@ bool SpoutVulkanReceiver::start_copy(SpoutShareReceiver &p_share) {
       break;
     }
   }
-  if (target < 0 || !p_share.lock(MUTEX_TIMEOUT_MS)) {
+  if (target < 0 || !p_share.lock()) {
     return false;
   }
   Slot &slot = *_slots[target];

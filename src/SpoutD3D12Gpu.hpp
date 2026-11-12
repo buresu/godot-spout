@@ -14,6 +14,31 @@ namespace godot {
 
 class SpoutD3D11Device;
 
+// Our texture that both Godot and D3D11On12 access.
+class SpoutD3D12Texture {
+public:
+  ~SpoutD3D12Texture() { release(); }
+
+  bool create(RenderingDevice *p_rd, uint32_t p_width, uint32_t p_height,
+              uint32_t p_dxgi_format, bool p_storage);
+  void release();
+  bool is_valid() const { return _rid.is_valid(); }
+  const RID &rid() const { return _rid; }
+  // Ours with simultaneous access (enhanced barriers); otherwise Godot's.
+  bool simultaneous() const { return _owned != nullptr; }
+
+  // D3D11 view in the state Godot's p_access left the texture in.
+  ID3D11Resource *wrapped(SpoutD3D11Device &p_d3d11, SpoutGodotAccess p_access,
+                          bool p_written);
+
+private:
+  RenderingDevice *_rd = nullptr;
+  RID _rid;
+  ID3D12Resource *_owned = nullptr;
+  ID3D11Resource *_wrapped_copy = nullptr;
+  ID3D11Resource *_wrapped_shader = nullptr;
+};
+
 class SpoutD3D12Sender : public SpoutGpuSender {
 public:
   explicit SpoutD3D12Sender(RenderingDevice *p_rd);
@@ -22,7 +47,7 @@ public:
   bool ensure(uint32_t p_width, uint32_t p_height,
               SpoutSendFormat p_format) override;
   uint64_t get_generation() const override { return _generation; }
-  RID get_target() const override { return _target; }
+  RID get_target() const override { return _target.rid(); }
   bool target_supports_storage() const override { return true; }
   uint64_t get_share_handle() const override { return _share_handle; }
   uint32_t get_dxgi_format() const override { return _dxgi_format; }
@@ -33,16 +58,9 @@ public:
   String get_adapter_name() const override;
 
 private:
-  ID3D11Resource *wrapped_for(SpoutGodotAccess p_access);
-
   RenderingDevice *_rd = nullptr;
   std::shared_ptr<SpoutD3D11Device> _d3d11;
-  RID _target;
-  // Our simultaneous-access resource; Godot only has a view of it.
-  ID3D12Resource *_owned = nullptr;
-  bool _simultaneous = false;
-  ID3D11Resource *_wrapped_copy = nullptr;
-  ID3D11Resource *_wrapped_shader = nullptr;
+  SpoutD3D12Texture _target;
   ID3D11Texture2D *_shared = nullptr;
   uint64_t _share_handle = 0;
   uint32_t _dxgi_format = 0;
@@ -60,29 +78,20 @@ public:
   bool open(const SpoutSenderInfo &p_info, String &r_error) override;
   void close() override;
   bool is_open() const override { return _source.is_valid(); }
-  RID get_source() const override { return _source; }
+  RID get_source() const override { return _source.rid(); }
   RenderingDevice::DataFormat get_source_format() const override {
     return _source_format;
   }
-  bool source_supports_copy() const override { return true; }
   bool acquire(SpoutGodotAccess p_last_access, bool p_new_frame,
                SpoutShareReceiver &p_share) override;
   String get_adapter_name() const override;
 
 private:
-  ID3D11Resource *wrapped_for(SpoutGodotAccess p_access);
-
   RenderingDevice *_rd = nullptr;
   std::shared_ptr<SpoutD3D11Device> _d3d11;
   ID3D11Texture2D *_shared = nullptr;
-  RID _source;
-  ID3D12Resource *_owned = nullptr;
-  bool _simultaneous = false;
+  SpoutD3D12Texture _source;
   RenderingDevice::DataFormat _source_format = RenderingDevice::DATA_FORMAT_MAX;
-  ID3D11Resource *_wrapped_copy = nullptr;
-  ID3D11Resource *_wrapped_shader = nullptr;
 };
-
-std::shared_ptr<SpoutD3D11Device> spout_d3d12_get_device(RenderingDevice *p_rd);
 
 } // namespace godot

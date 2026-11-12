@@ -13,6 +13,9 @@
 
 namespace godot {
 
+// Never stall Godot's frame on a stuck peer.
+constexpr uint32_t SPOUT_MUTEX_TIMEOUT_MS = 4;
+
 // What a sender advertises in its shared memory.
 struct SpoutSenderInfo {
   String name;
@@ -46,8 +49,8 @@ public:
   String get_name() const;
   String get_requested_name() const { return _requested_name; }
 
-  // False if a receiver holds it for p_timeout_ms (skip the frame).
-  bool lock(uint32_t p_timeout_ms);
+  // False if a receiver holds it (skip the frame).
+  bool lock(uint32_t p_timeout_ms = SPOUT_MUTEX_TIMEOUT_MS);
   void unlock();
 
   void signal_frame();
@@ -80,7 +83,7 @@ public:
   bool is_connected() const { return _connected; }
   const SpoutSenderInfo &get_info() const { return _info; }
 
-  bool lock(uint32_t p_timeout_ms);
+  bool lock(uint32_t p_timeout_ms = SPOUT_MUTEX_TIMEOUT_MS);
   void unlock();
 
   // Always true without Spout frame counting.

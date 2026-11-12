@@ -63,6 +63,14 @@ void main() {
 }
 )";
 
+// Same values as in SHADER_SOURCE.
+enum : uint32_t {
+  FLAG_FLIP_Y = 1u,
+  FLAG_OPAQUE = 2u,
+  FLAG_LINEAR_TO_SRGB = 4u,
+  FLAG_SRGB_TO_LINEAR = 8u,
+};
+
 const char *format_qualifier(RenderingDevice::DataFormat p_format) {
   switch (p_format) {
   case RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM:
@@ -234,15 +242,15 @@ SpoutGodotAccess SpoutBlit::run(const RID &p_source, const RID &p_dest,
 
   uint32_t flags = 0;
   if (p_options.flip_y) {
-    flags |= 1u;
+    flags |= FLAG_FLIP_Y;
   }
   if (p_options.force_opaque) {
-    flags |= 2u;
+    flags |= FLAG_OPAQUE;
   }
   if (p_options.color == SPOUT_COLOR_LINEAR_TO_SRGB) {
-    flags |= 4u;
+    flags |= FLAG_LINEAR_TO_SRGB;
   } else if (p_options.color == SPOUT_COLOR_SRGB_TO_LINEAR) {
-    flags |= 8u;
+    flags |= FLAG_SRGB_TO_LINEAR;
   }
   PackedByteArray push;
   push.resize(16);

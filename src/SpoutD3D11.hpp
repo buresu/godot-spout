@@ -12,13 +12,21 @@
 
 struct ID3D11Device;
 struct ID3D11DeviceContext;
+struct ID3D11InfoQueue;
 struct ID3D11On12Device;
-struct ID3D11Resource;
 struct ID3D11Texture2D;
 struct ID3D12Device;
+struct ID3D12InfoQueue;
 struct IUnknown;
 
 namespace godot {
+
+template <typename T> void spout_release(T *&p) {
+  if (p) {
+    p->Release();
+    p = nullptr;
+  }
+}
 
 class SpoutD3D11Device {
 public:
@@ -42,9 +50,12 @@ public:
                              ID3D11Texture2D **r_texture,
                              uint64_t *r_handle) const;
 
-  // Fails if the texture is on another adapter.
+  // Fails if the texture is on another adapter or its format is unsupported.
+  // r_dxgi_format is the texture's own format (advertised ones are sometimes
+  // wrong), normalised.
   bool open_shared_texture(uint64_t p_handle, ID3D11Texture2D **r_texture,
-                           String &r_error) const;
+                           uint32_t &r_width, uint32_t &r_height,
+                           uint32_t &r_dxgi_format, String &r_error) const;
 
   // Only with GODOT_SPOUT_D3D12_DEBUG.
   void drain_debug_messages(const char *p_where) const;
@@ -56,9 +67,8 @@ private:
   ID3D11Device *_device = nullptr;
   ID3D11DeviceContext *_context = nullptr;
   ID3D11On12Device *_on12 = nullptr;
-  ID3D12Device *_device12 = nullptr; // not owned beyond D3D11On12's own ref
-  IUnknown *_info_queue12 = nullptr;
-  IUnknown *_info_queue11 = nullptr;
+  ID3D11InfoQueue *_info_queue11 = nullptr;
+  ID3D12InfoQueue *_info_queue12 = nullptr;
   String _adapter_name;
 };
 

@@ -253,7 +253,7 @@ private:
   RID _shown;   // shown by the target / owner
   RenderingDevice::DataFormat _visible_format =
       RenderingDevice::DATA_FORMAT_MAX;
-  bool _visible_flip = false;
+  bool _visible_shader = false; // _visible is written by the compute pass
   SpoutGodotAccess _last_access = SPOUT_ACCESS_NONE;
   bool _force_next = false;
   bool _present = false; // process_frame() -> present()

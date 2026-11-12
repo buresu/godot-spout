@@ -68,13 +68,6 @@ uint32_t godot::spout_send_format_to_dxgi(SpoutSendFormat p_format) {
                                                : SPOUT_DXGI_R8G8B8A8_UNORM;
 }
 
-RenderingDevice::DataFormat
-godot::spout_send_format_to_rd(SpoutSendFormat p_format) {
-  return p_format == SPOUT_SEND_FORMAT_RGBA16F
-             ? RenderingDevice::DATA_FORMAT_R16G16B16A16_SFLOAT
-             : RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM;
-}
-
 SpoutSendFormat
 godot::spout_resolve_send_format(SpoutSendFormat p_requested,
                                  RenderingDevice::DataFormat p_source) {

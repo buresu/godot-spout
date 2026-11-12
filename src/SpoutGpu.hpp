@@ -70,7 +70,6 @@ public:
   // Godot reads the sender's frame from here.
   virtual RID get_source() const = 0;
   virtual RenderingDevice::DataFormat get_source_format() const = 0;
-  virtual bool source_supports_copy() const = 0;
 
   // After the previous frame was submitted, to start a copy early.
   virtual void prefetch(SpoutGodotAccess p_last_access, bool p_new_frame,

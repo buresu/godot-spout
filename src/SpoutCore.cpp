@@ -21,6 +21,18 @@ constexpr uint64_t RETRY_DELAY_MSEC = 1000;
 
 RenderingServer *rs() { return RenderingServer::get_singleton(); }
 
+String unsupported_driver(const String &p_driver, bool p_sending) {
+  String hint;
+  if (p_driver == "vulkan") {
+    hint = " (build with GODOT_SPOUT_ENABLE_VULKAN)";
+  } else if (p_driver == "opengl3") {
+    hint = p_sending ? " (build with GODOT_SPOUT_ENABLE_OPENGL)"
+                     : " (not implemented for the Compatibility renderer)";
+  }
+  return "rendering driver \"" + p_driver + "\" is not supported for " +
+         (p_sending ? "sending" : "receiving") + hint + ".";
+}
+
 void free_rid_safe(RenderingDevice *p_rd, RID &p_rid) {
   if (p_rid.is_valid() && p_rd && spout_rendering_available()) {
     p_rd->free_rid(p_rid);
@@ -273,31 +285,24 @@ void SpoutSenderCore::update_status() {
   status.frames_skipped = _frames_skipped;
   if (_gpu) {
     status.adapter_name = _gpu->get_adapter_name();
-  }
-#ifdef GODOT_SPOUT_ENABLE_OPENGL
-  else if (_gl) {
+  } else if (_gl) {
     status.adapter_name = _gl->get_adapter_name();
   }
-#endif
   std::lock_guard<std::mutex> guard(_status_lock);
   _status = status;
 }
 
 bool SpoutSenderCore::is_sending() const {
-#ifdef GODOT_SPOUT_ENABLE_OPENGL
   if (_gl) {
     return _gl->is_registered();
   }
-#endif
   return _share.is_registered();
 }
 
 String SpoutSenderCore::get_active_name() const {
-#ifdef GODOT_SPOUT_ENABLE_OPENGL
   if (_gl) {
     return _gl->get_name();
   }
-#endif
   return _share.is_registered() ? _share.get_name() : String();
 }
 
@@ -321,11 +326,9 @@ void SpoutSenderCore::stop() {
   const bool was_sending = is_sending();
   const String name = get_active_name();
   _share.unregister();
-#ifdef GODOT_SPOUT_ENABLE_OPENGL
   if (_gl) {
     _gl->release();
   }
-#endif
   _pending_access = SPOUT_ACCESS_NONE;
   _published_generation = 0;
   if (was_sending) {
@@ -342,9 +345,7 @@ void SpoutSenderCore::release_resources() {
   stop();
   _blit.reset(); // frees its RD objects
   _gpu.reset();
-#ifdef GODOT_SPOUT_ENABLE_OPENGL
   _gl.reset();
-#endif
   _rd = nullptr;
   _driver = String();
   _width = _height = 0;
@@ -435,11 +436,7 @@ void SpoutSenderCore::process_frame() {
     _rd = server->get_rendering_device();
     _gpu.reset(spout_gpu_sender_create(_rd, driver));
     if (!_gpu) {
-      fail("rendering driver \"" + driver + "\" is not supported for sending" +
-           (driver == "vulkan"
-                ? String(" (build with GODOT_SPOUT_ENABLE_VULKAN)")
-                : String()) +
-           ".");
+      fail(unsupported_driver(driver, true));
       return;
     }
     _blit = std::make_unique<SpoutBlit>(_rd);
@@ -493,7 +490,6 @@ void SpoutSenderCore::process_frame() {
 }
 
 void SpoutSenderCore::send_gl() {
-#ifdef GODOT_SPOUT_ENABLE_OPENGL
   if (_gpu) {
     release_resources(); // driver changed (only possible in tests)
   }
@@ -540,7 +536,6 @@ void SpoutSenderCore::send_gl() {
                 "\": SpoutGL SendTexture failed.");
     }
   }
-#endif
 }
 
 // ===========================================================================
@@ -719,8 +714,7 @@ bool SpoutReceiverCore::ensure_visible() {
   // The source format if copyable, else a storable one.
   const RenderingDevice::DataFormat source_format = _gpu->get_source_format();
   RenderingDevice::DataFormat format = source_format;
-  const bool shader =
-      _cur.options.needs_shader() || !_gpu->source_supports_copy();
+  const bool shader = _cur.options.needs_shader();
   if (shader && !SpoutBlit::can_store(format)) {
     format = (source_format == RenderingDevice::DATA_FORMAT_B8G8R8A8_UNORM)
                  ? RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM
@@ -728,7 +722,7 @@ bool SpoutReceiverCore::ensure_visible() {
   }
   const SpoutSenderInfo &info = _share.get_info();
   if (_visible.is_valid() && _visible_format == format &&
-      _visible_flip == shader) {
+      _visible_shader == shader) {
     Ref<RDTextureFormat> current = _rd->texture_get_format(_visible);
     if (current.is_valid() && current->get_width() == info.width &&
         current->get_height() == info.height) {
@@ -768,7 +762,7 @@ bool SpoutReceiverCore::ensure_visible() {
   }
   _visible = created;
   _visible_format = format;
-  _visible_flip = shader;
+  _visible_shader = shader;
   return true;
 }
 
@@ -841,15 +835,7 @@ void SpoutReceiverCore::process_frame() {
     _gpu.reset(spout_gpu_receiver_create(_rd, driver));
     if (!_gpu) {
       if (_last_error.is_empty()) {
-        _last_error =
-            "Receiving is not supported on the \"" + driver +
-            "\" rendering driver" +
-            (driver == "opengl3"
-                 ? String(" (Compatibility renderer).")
-                 : String(".") + (driver == "vulkan"
-                                      ? String(" Build with "
-                                               "GODOT_SPOUT_ENABLE_VULKAN.")
-                                      : String()));
+        _last_error = "Spout receiver: " + unsupported_driver(driver, false);
         spout_error(_last_error);
       }
       _next_poll_msec = spout_ticks_msec() + 10 * RETRY_DELAY_MSEC;
@@ -892,11 +878,8 @@ void SpoutReceiverCore::process_frame() {
       return;
     }
   }
-  if ((_cur.options.needs_shader() || !_gpu->source_supports_copy()) !=
-      _visible_flip) {
-    if (!ensure_visible()) {
-      return;
-    }
+  if (_cur.options.needs_shader() != _visible_shader && !ensure_visible()) {
+    return;
   }
 
   const bool new_frame = _share.is_new_frame();

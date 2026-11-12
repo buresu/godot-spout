@@ -3,12 +3,12 @@
 // OpenGL (Compatibility) sender via SpoutGL. No RenderingDevice, so it doesn't
 // implement SpoutGpuSender. Receiving is not implemented.
 
-#ifdef GODOT_SPOUT_ENABLE_OPENGL
-
 #include <cstdint>
 #include <memory>
 
 #include <godot_cpp/variant/string.hpp>
+
+#ifdef GODOT_SPOUT_ENABLE_OPENGL
 
 class Spout;
 
@@ -41,8 +41,17 @@ private:
 #else
 
 namespace godot {
-// For SpoutSenderCore's unique_ptr member.
-class SpoutGLSender {};
+// Never instantiated; keeps SpoutSenderCore free of #ifdefs.
+class SpoutGLSender {
+public:
+  bool send(uint64_t, uint32_t, uint32_t, const String &, bool) {
+    return false;
+  }
+  void release() {}
+  bool is_registered() const { return false; }
+  String get_name() const { return String(); }
+  String get_adapter_name() const { return String(); }
+};
 } // namespace godot
 
 #endif // GODOT_SPOUT_ENABLE_OPENGL

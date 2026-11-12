@@ -32,6 +32,20 @@ bool wait_mutex(HANDLE p_mutex, uint32_t p_timeout_ms) {
   }
 }
 
+void release_mutex(HANDLE p_mutex) {
+  if (p_mutex) {
+    ReleaseMutex(p_mutex);
+  }
+}
+
+void close_sync_objects(spoutFrameCount &p_frame, HANDLE &p_mutex) {
+  p_frame.CleanupFrameCount();
+  if (p_mutex) {
+    CloseHandle(p_mutex);
+    p_mutex = nullptr;
+  }
+}
+
 } // namespace
 
 PackedStringArray godot::spout_get_sender_list() {
@@ -120,11 +134,7 @@ void SpoutShareSender::unregister() {
     return;
   }
   spout_log("Unregistered sender \"" + get_name() + "\"");
-  _impl->frame.CleanupFrameCount();
-  if (_impl->mutex) {
-    CloseHandle(_impl->mutex);
-    _impl->mutex = nullptr;
-  }
+  close_sync_objects(_impl->frame, _impl->mutex);
   _impl->names.ReleaseSenderName(_impl->name);
   _impl->name[0] = 0;
   _registered = false;
@@ -136,11 +146,7 @@ bool SpoutShareSender::lock(uint32_t p_timeout_ms) {
   return wait_mutex(_impl->mutex, p_timeout_ms);
 }
 
-void SpoutShareSender::unlock() {
-  if (_impl->mutex) {
-    ReleaseMutex(_impl->mutex);
-  }
-}
+void SpoutShareSender::unlock() { release_mutex(_impl->mutex); }
 
 void SpoutShareSender::signal_frame() {
   _impl->frame.SetNewFrame();
@@ -211,11 +217,7 @@ SpoutShareReceiver::poll(const String &p_name, SpoutSenderInfo &r_info) {
 }
 
 void SpoutShareReceiver::open_sync_objects(const String &p_name) {
-  _impl->frame.CleanupFrameCount();
-  if (_impl->mutex) {
-    CloseHandle(_impl->mutex);
-    _impl->mutex = nullptr;
-  }
+  close_sync_objects(_impl->frame, _impl->mutex);
   CharString utf8 = p_name.utf8();
   // Open, don't create: the mutex belongs to the sender.
   _impl->mutex = OpenMutexA(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE,
@@ -227,11 +229,7 @@ void SpoutShareReceiver::disconnect() {
   if (!_connected) {
     return;
   }
-  _impl->frame.CleanupFrameCount();
-  if (_impl->mutex) {
-    CloseHandle(_impl->mutex);
-    _impl->mutex = nullptr;
-  }
+  close_sync_objects(_impl->frame, _impl->mutex);
   _info = SpoutSenderInfo();
   _connected = false;
 }
@@ -240,11 +238,7 @@ bool SpoutShareReceiver::lock(uint32_t p_timeout_ms) {
   return wait_mutex(_impl->mutex, p_timeout_ms);
 }
 
-void SpoutShareReceiver::unlock() {
-  if (_impl->mutex) {
-    ReleaseMutex(_impl->mutex);
-  }
-}
+void SpoutShareReceiver::unlock() { release_mutex(_impl->mutex); }
 
 bool SpoutShareReceiver::is_new_frame() { return _impl->frame.GetNewFrame(); }
 

@@ -30,12 +30,7 @@ using namespace godot;
 
 namespace {
 
-// State Godot leaves a texture in after the last access we recorded.
-D3D12_RESOURCE_STATES state_for(SpoutGodotAccess p_access, bool p_written,
-                                bool p_simultaneous) {
-  if (p_simultaneous) {
-    return D3D12_RESOURCE_STATE_COMMON;
-  }
+D3D12_RESOURCE_STATES state_for(SpoutGodotAccess p_access, bool p_written) {
   switch (p_access) {
   case SPOUT_ACCESS_COPY:
     return p_written ? D3D12_RESOURCE_STATE_COPY_DEST
@@ -48,9 +43,11 @@ D3D12_RESOURCE_STATES state_for(SpoutGodotAccess p_access, bool p_written,
   }
 }
 
-ID3D12Device *get_device12(RenderingDevice *p_rd) {
-  return reinterpret_cast<ID3D12Device *>(p_rd->get_driver_resource(
-      RenderingDevice::DRIVER_RESOURCE_LOGICAL_DEVICE, RID(), 0));
+template <typename T>
+T *driver_resource(RenderingDevice *p_rd,
+                   RenderingDevice::DriverResource p_resource,
+                   const RID &p_rid = RID()) {
+  return reinterpret_cast<T *>(p_rd->get_driver_resource(p_resource, p_rid, 0));
 }
 
 bool has_enhanced_barriers(ID3D12Device *p_device) {
@@ -61,103 +58,12 @@ bool has_enhanced_barriers(ID3D12Device *p_device) {
          options.EnhancedBarriersSupported;
 }
 
-// r_owned is set when we own the D3D12 resource.
-RID create_texture(RenderingDevice *p_rd, uint32_t p_width, uint32_t p_height,
-                   RenderingDevice::DataFormat p_rd_format,
-                   uint32_t p_dxgi_format, bool p_storage,
-                   ID3D12Resource **r_owned, bool *r_simultaneous) {
-  *r_owned = nullptr;
-  *r_simultaneous = false;
-  BitField<RenderingDevice::TextureUsageBits> usage =
-      RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT |
-      RenderingDevice::TEXTURE_USAGE_CAN_COPY_TO_BIT |
-      RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
-  if (p_storage) {
-    usage.set_flag(RenderingDevice::TEXTURE_USAGE_STORAGE_BIT);
-  }
-
-  ID3D12Device *device = get_device12(p_rd);
-  if (has_enhanced_barriers(device)) {
-    D3D12_HEAP_PROPERTIES heap = {};
-    heap.Type = D3D12_HEAP_TYPE_DEFAULT;
-    D3D12_RESOURCE_DESC desc = {};
-    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    desc.Width = p_width;
-    desc.Height = p_height;
-    desc.DepthOrArraySize = 1;
-    desc.MipLevels = 1;
-    desc.Format = static_cast<DXGI_FORMAT>(p_dxgi_format);
-    desc.SampleDesc.Count = 1;
-    desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
-    if (p_storage) {
-      desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-    }
-    ID3D12Resource *resource = nullptr;
-    HRESULT hr = device->CreateCommittedResource(
-        &heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON,
-        nullptr, IID_PPV_ARGS(&resource));
-    if (FAILED(hr)) {
-      spout_error("CreateCommittedResource failed (0x" +
-                  String::num_int64(static_cast<uint32_t>(hr), 16) + ").");
-      return RID();
-    }
-    const RID rid = p_rd->texture_create_from_extension(
-        RenderingDevice::TEXTURE_TYPE_2D, p_rd_format,
-        RenderingDevice::TEXTURE_SAMPLES_1, usage,
-        reinterpret_cast<uint64_t>(resource), p_width, p_height, 1, 1);
-    if (!rid.is_valid()) {
-      resource->Release();
-      return RID();
-    }
-    *r_owned = resource;
-    *r_simultaneous = true;
-    return rid;
-  }
-
-  // Legacy barriers: Godot creates and tracks it.
-  Ref<RDTextureFormat> fmt;
-  fmt.instantiate();
-  fmt->set_format(p_rd_format);
-  fmt->set_width(p_width);
-  fmt->set_height(p_height);
-  fmt->set_usage_bits(usage);
-  Ref<RDTextureView> view;
-  view.instantiate();
-  return p_rd->texture_create(fmt, view);
-}
-
-void free_texture(RenderingDevice *p_rd, RID &p_rid, ID3D12Resource *&p_owned) {
-  if (p_rid.is_valid()) {
-    p_rd->free_rid(p_rid); // Godot defers this until its frames are done
-    p_rid = RID();
-  }
-  if (p_owned) {
-    ID3D12Resource *resource = p_owned;
-    spout_defer_release([resource]() { resource->Release(); });
-    p_owned = nullptr;
-  }
-}
-
-ID3D11Resource *wrap(SpoutD3D11Device &p_d3d11, ID3D12Resource *p_resource,
-                     D3D12_RESOURCE_STATES p_state) {
-  D3D11_RESOURCE_FLAGS flags = {}; // inferred from the D3D12 resource
-  ID3D11Resource *wrapped = nullptr;
-  HRESULT hr = p_d3d11.on12()->CreateWrappedResource(
-      p_resource, &flags, p_state, p_state, IID_PPV_ARGS(&wrapped));
-  if (FAILED(hr)) {
-    spout_error("CreateWrappedResource failed (0x" +
-                String::num_int64(static_cast<uint32_t>(hr), 16) + ").");
-    return nullptr;
-  }
-  return wrapped;
-}
-
-template <typename T> void safe_release(T *&p) {
-  if (p) {
-    p->Release();
-    p = nullptr;
-  }
+std::shared_ptr<SpoutD3D11Device> get_d3d11(RenderingDevice *p_rd) {
+  return SpoutD3D11Device::get_on12(
+      driver_resource<ID3D12Device>(
+          p_rd, RenderingDevice::DRIVER_RESOURCE_LOGICAL_DEVICE),
+      driver_resource<IUnknown>(
+          p_rd, RenderingDevice::DRIVER_RESOURCE_COMMAND_QUEUE));
 }
 
 void copy_on12(SpoutD3D11Device &p_d3d11, ID3D11Resource *p_dst,
@@ -168,25 +74,124 @@ void copy_on12(SpoutD3D11Device &p_d3d11, ID3D11Resource *p_dst,
   p_d3d11.context()->Flush();
 }
 
-// Never stall Godot's frame on a stuck peer.
-constexpr uint32_t MUTEX_TIMEOUT_MS = 4;
-
 } // namespace
 
-std::shared_ptr<SpoutD3D11Device>
-godot::spout_d3d12_get_device(RenderingDevice *p_rd) {
-  auto device = reinterpret_cast<ID3D12Device *>(p_rd->get_driver_resource(
-      RenderingDevice::DRIVER_RESOURCE_LOGICAL_DEVICE, RID(), 0));
-  auto queue = reinterpret_cast<IUnknown *>(p_rd->get_driver_resource(
-      RenderingDevice::DRIVER_RESOURCE_COMMAND_QUEUE, RID(), 0));
-  return SpoutD3D11Device::get_on12(device, queue);
+// ---------------------------------------------------------------------------
+// SpoutD3D12Texture
+
+bool SpoutD3D12Texture::create(RenderingDevice *p_rd, uint32_t p_width,
+                               uint32_t p_height, uint32_t p_dxgi_format,
+                               bool p_storage) {
+  release();
+  _rd = p_rd;
+  const RenderingDevice::DataFormat format = spout_dxgi_to_rd(p_dxgi_format);
+  BitField<RenderingDevice::TextureUsageBits> usage =
+      RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT |
+      RenderingDevice::TEXTURE_USAGE_CAN_COPY_TO_BIT |
+      RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
+  if (p_storage) {
+    usage.set_flag(RenderingDevice::TEXTURE_USAGE_STORAGE_BIT);
+  }
+
+  ID3D12Device *device = driver_resource<ID3D12Device>(
+      p_rd, RenderingDevice::DRIVER_RESOURCE_LOGICAL_DEVICE);
+  if (!has_enhanced_barriers(device)) {
+    // Godot creates and tracks it.
+    Ref<RDTextureFormat> fmt;
+    fmt.instantiate();
+    fmt->set_format(format);
+    fmt->set_width(p_width);
+    fmt->set_height(p_height);
+    fmt->set_usage_bits(usage);
+    Ref<RDTextureView> view;
+    view.instantiate();
+    _rid = p_rd->texture_create(fmt, view);
+    return _rid.is_valid();
+  }
+
+  D3D12_HEAP_PROPERTIES heap = {};
+  heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+  D3D12_RESOURCE_DESC desc = {};
+  desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+  desc.Width = p_width;
+  desc.Height = p_height;
+  desc.DepthOrArraySize = 1;
+  desc.MipLevels = 1;
+  desc.Format = static_cast<DXGI_FORMAT>(p_dxgi_format);
+  desc.SampleDesc.Count = 1;
+  desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+  desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
+  if (p_storage) {
+    desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+  }
+  ID3D12Resource *resource = nullptr;
+  const HRESULT hr = device->CreateCommittedResource(
+      &heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON, nullptr,
+      IID_PPV_ARGS(&resource));
+  if (FAILED(hr)) {
+    spout_error("CreateCommittedResource failed (0x" +
+                String::num_int64(static_cast<uint32_t>(hr), 16) + ").");
+    return false;
+  }
+  _rid = p_rd->texture_create_from_extension(
+      RenderingDevice::TEXTURE_TYPE_2D, format,
+      RenderingDevice::TEXTURE_SAMPLES_1, usage,
+      reinterpret_cast<uint64_t>(resource), p_width, p_height, 1, 1);
+  if (!_rid.is_valid()) {
+    resource->Release();
+    return false;
+  }
+  _owned = resource;
+  return true;
+}
+
+void SpoutD3D12Texture::release() {
+  // D3D11 views before the D3D12 texture.
+  spout_release(_wrapped_copy);
+  spout_release(_wrapped_shader);
+  if (_rid.is_valid()) {
+    _rd->free_rid(_rid); // Godot defers this until its frames are done
+    _rid = RID();
+  }
+  if (_owned) {
+    ID3D12Resource *resource = _owned;
+    spout_defer_release([resource]() { resource->Release(); });
+    _owned = nullptr;
+  }
+}
+
+ID3D11Resource *SpoutD3D12Texture::wrapped(SpoutD3D11Device &p_d3d11,
+                                           SpoutGodotAccess p_access,
+                                           bool p_written) {
+  ID3D11Resource *&slot =
+      p_access == SPOUT_ACCESS_SHADER ? _wrapped_shader : _wrapped_copy;
+  if (slot || !_rid.is_valid()) {
+    return slot;
+  }
+  ID3D12Resource *resource = driver_resource<ID3D12Resource>(
+      _rd, RenderingDevice::DRIVER_RESOURCE_TEXTURE, _rid);
+  if (!resource) {
+    return nullptr;
+  }
+  const D3D12_RESOURCE_STATES state = simultaneous()
+                                          ? D3D12_RESOURCE_STATE_COMMON
+                                          : state_for(p_access, p_written);
+  D3D11_RESOURCE_FLAGS flags = {}; // inferred from the D3D12 resource
+  const HRESULT hr = p_d3d11.on12()->CreateWrappedResource(
+      resource, &flags, state, state, IID_PPV_ARGS(&slot));
+  if (FAILED(hr)) {
+    spout_error("CreateWrappedResource failed (0x" +
+                String::num_int64(static_cast<uint32_t>(hr), 16) + ").");
+    slot = nullptr;
+  }
+  return slot;
 }
 
 // ---------------------------------------------------------------------------
 // Sender
 
 SpoutD3D12Sender::SpoutD3D12Sender(RenderingDevice *p_rd)
-    : _rd(p_rd), _d3d11(spout_d3d12_get_device(p_rd)) {}
+    : _rd(p_rd), _d3d11(get_d3d11(p_rd)) {}
 
 SpoutD3D12Sender::~SpoutD3D12Sender() { release(); }
 
@@ -205,15 +210,11 @@ bool SpoutD3D12Sender::ensure(uint32_t p_width, uint32_t p_height,
   }
   release();
 
-  _target = create_texture(
-      _rd, p_width, p_height, spout_send_format_to_rd(p_format),
-      spout_send_format_to_dxgi(p_format), true, &_owned, &_simultaneous);
-  if (!_target.is_valid()) {
+  _dxgi_format = spout_send_format_to_dxgi(p_format);
+  if (!_target.create(_rd, p_width, p_height, _dxgi_format, true)) {
     spout_error("Could not create the send texture.");
     return false;
   }
-
-  _dxgi_format = spout_send_format_to_dxgi(p_format);
   if (!_d3d11->create_shared_texture(p_width, p_height, _dxgi_format, &_shared,
                                      &_share_handle)) {
     release();
@@ -228,29 +229,13 @@ bool SpoutD3D12Sender::ensure(uint32_t p_width, uint32_t p_height,
   return true;
 }
 
-ID3D11Resource *SpoutD3D12Sender::wrapped_for(SpoutGodotAccess p_access) {
-  ID3D11Resource *&slot =
-      p_access == SPOUT_ACCESS_SHADER ? _wrapped_shader : _wrapped_copy;
-  if (!slot) {
-    auto resource = reinterpret_cast<ID3D12Resource *>(_rd->get_driver_resource(
-        RenderingDevice::DRIVER_RESOURCE_TEXTURE, _target, 0));
-    if (resource) {
-      slot = wrap(*_d3d11, resource, state_for(p_access, true, _simultaneous));
-    }
-  }
-  return slot;
-}
-
 bool SpoutD3D12Sender::publish(SpoutGodotAccess p_access,
                                SpoutShareSender &p_share) {
   if (!_shared || p_access == SPOUT_ACCESS_NONE) {
     return false;
   }
-  ID3D11Resource *wrapped = wrapped_for(p_access);
-  if (!wrapped) {
-    return false;
-  }
-  if (!p_share.lock(MUTEX_TIMEOUT_MS)) {
+  ID3D11Resource *wrapped = _target.wrapped(*_d3d11, p_access, true);
+  if (!wrapped || !p_share.lock()) {
     return false;
   }
   copy_on12(*_d3d11, _shared, wrapped, wrapped);
@@ -260,12 +245,9 @@ bool SpoutD3D12Sender::publish(SpoutGodotAccess p_access,
 }
 
 void SpoutD3D12Sender::release() {
-  // D3D11 views before the D3D12 texture.
-  safe_release(_wrapped_copy);
-  safe_release(_wrapped_shader);
-  safe_release(_shared);
+  _target.release();
+  spout_release(_shared);
   _share_handle = 0;
-  free_texture(_rd, _target, _owned);
   _width = _height = 0;
 }
 
@@ -273,7 +255,7 @@ void SpoutD3D12Sender::release() {
 // Receiver
 
 SpoutD3D12Receiver::SpoutD3D12Receiver(RenderingDevice *p_rd)
-    : _rd(p_rd), _d3d11(spout_d3d12_get_device(p_rd)) {}
+    : _rd(p_rd), _d3d11(get_d3d11(p_rd)) {}
 
 SpoutD3D12Receiver::~SpoutD3D12Receiver() { close(); }
 
@@ -287,52 +269,25 @@ bool SpoutD3D12Receiver::open(const SpoutSenderInfo &p_info, String &r_error) {
     r_error = "no D3D11On12 device";
     return false;
   }
-  if (!_d3d11->open_shared_texture(p_info.share_handle, &_shared, r_error)) {
+  uint32_t width = 0, height = 0, dxgi = 0;
+  if (!_d3d11->open_shared_texture(p_info.share_handle, &_shared, width, height,
+                                   dxgi, r_error)) {
     return false;
   }
-
-  // Advertised formats are sometimes wrong.
-  D3D11_TEXTURE2D_DESC desc = {};
-  _shared->GetDesc(&desc);
-  const uint32_t dxgi = spout_dxgi_normalize(desc.Format);
-  _source_format = spout_dxgi_to_rd(dxgi);
-  if (_source_format == RenderingDevice::DATA_FORMAT_MAX) {
-    r_error =
-        "unsupported sender format " + spout_dxgi_format_name(desc.Format);
-    close();
-    return false;
-  }
-
-  _source = create_texture(_rd, desc.Width, desc.Height, _source_format, dxgi,
-                           false, &_owned, &_simultaneous);
-  if (!_source.is_valid()) {
+  if (!_source.create(_rd, width, height, dxgi, false)) {
     r_error = "could not create the receive texture";
     close();
     return false;
   }
+  _source_format = spout_dxgi_to_rd(dxgi);
   _d3d11->drain_debug_messages("receiver open");
   return true;
 }
 
 void SpoutD3D12Receiver::close() {
-  safe_release(_wrapped_copy);
-  safe_release(_wrapped_shader);
-  safe_release(_shared);
-  free_texture(_rd, _source, _owned);
+  _source.release();
+  spout_release(_shared);
   _source_format = RenderingDevice::DATA_FORMAT_MAX;
-}
-
-ID3D11Resource *SpoutD3D12Receiver::wrapped_for(SpoutGodotAccess p_access) {
-  ID3D11Resource *&slot =
-      p_access == SPOUT_ACCESS_SHADER ? _wrapped_shader : _wrapped_copy;
-  if (!slot) {
-    auto resource = reinterpret_cast<ID3D12Resource *>(_rd->get_driver_resource(
-        RenderingDevice::DRIVER_RESOURCE_TEXTURE, _source, 0));
-    if (resource) {
-      slot = wrap(*_d3d11, resource, state_for(p_access, false, _simultaneous));
-    }
-  }
-  return slot;
 }
 
 bool SpoutD3D12Receiver::acquire(SpoutGodotAccess p_last_access,
@@ -341,15 +296,12 @@ bool SpoutD3D12Receiver::acquire(SpoutGodotAccess p_last_access,
   if (!_shared || !_source.is_valid()) {
     return false;
   }
-  if (p_last_access == SPOUT_ACCESS_NONE && !_simultaneous) {
+  if (p_last_access == SPOUT_ACCESS_NONE && !_source.simultaneous()) {
     // Legacy barriers: _source's state is unknown until Godot's first read.
     return false;
   }
-  ID3D11Resource *wrapped = wrapped_for(p_last_access);
-  if (!wrapped) {
-    return false;
-  }
-  if (!p_share.lock(MUTEX_TIMEOUT_MS)) {
+  ID3D11Resource *wrapped = _source.wrapped(*_d3d11, p_last_access, false);
+  if (!wrapped || !p_share.lock()) {
     return false;
   }
   copy_on12(*_d3d11, wrapped, _shared, wrapped);
