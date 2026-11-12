@@ -1,12 +1,7 @@
 #pragma once
 
-// OpenGL (Compatibility renderer) sender, GODOT_SPOUT_ENABLE_OPENGL.
-//
-// The GL path doesn't go through RenderingDevice, so it doesn't fit the
-// SpoutGpuSender interface: SpoutGL's Spout class does everything (GL/DX
-// interop when the driver supports WGL_NV_DX_interop, otherwise a CPU
-// readback, which SpoutGL picks on its own). Receiving on OpenGL is not
-// implemented.
+// OpenGL (Compatibility) sender via SpoutGL. No RenderingDevice, so it doesn't
+// implement SpoutGpuSender. Receiving is not implemented.
 
 #ifdef GODOT_SPOUT_ENABLE_OPENGL
 
@@ -24,9 +19,7 @@ public:
   SpoutGLSender();
   ~SpoutGLSender();
 
-  // Sends the GL texture p_gl_texture. Registers (or renames) the sender
-  // first if needed. Must run with Godot's GL context current, i.e. on the
-  // render thread.
+  // Render thread (Godot's GL context current).
   bool send(uint64_t p_gl_texture, uint32_t p_width, uint32_t p_height,
             const String &p_name, bool p_invert);
   void release();
@@ -48,8 +41,7 @@ private:
 #else
 
 namespace godot {
-// Stub so SpoutSenderCore's std::unique_ptr<SpoutGLSender> member can be
-// destroyed when the OpenGL backend is not built.
+// For SpoutSenderCore's unique_ptr member.
 class SpoutGLSender {};
 } // namespace godot
 

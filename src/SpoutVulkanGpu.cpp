@@ -21,24 +21,15 @@
 
 using namespace godot;
 
-// Slots: textures created by our D3D11 device on Godot's GPU and imported
-// into Vulkan as RD textures (D3D11_TEXTURE_KMT external memory).
-//
-// Sender: the Spout shared texture is a slot Godot writes in its own queue,
-// like the D3D12 sender. (Copying it through D3D11 instead updated it later
-// in the refresh and made D3D12 receivers repeat frames.)
-//
-// Receiver: D3D11 copies the sender's texture into a slot under the access
-// mutex right after the previous frame (prefetch). Godot reads the slot once
-// the copy's query is done and releases it once that frame's fence was
-// waited for (spout_render_frame_done).
-//
-// Limit: Godot doesn't enable VK_KHR_external_memory_win32, so the import is
-// technically outside the spec; it works on drivers that don't enforce it.
+// Slots: D3D11 shared textures on Godot's GPU imported into Vulkan.
+// Sender: Godot writes the Spout shared texture in its own queue (a D3D11 copy
+// lands later and makes D3D12 receivers repeat frames).
+// Receiver: D3D11 copies the sender's texture into a slot right after the
+// previous frame (prefetch); Godot reads it once the copy's query is done.
+// Godot doesn't enable VK_KHR_external_memory_win32; drivers don't enforce it.
 
 namespace {
 
-// Receivers hold the access mutex only while they submit a copy.
 constexpr uint32_t MUTEX_TIMEOUT_MS = 4;
 // Bounded wait for a prefetched copy that isn't done yet.
 constexpr int64_t RECEIVE_WAIT_USEC = 2000;
@@ -130,8 +121,7 @@ template <typename T> void safe_release(T *&p) {
   }
 }
 
-// Does the driver let us import a D3D11 texture of this format with this
-// usage? Fills r_dedicated if the import needs a dedicated allocation.
+// r_dedicated: the import needs a dedicated allocation.
 bool import_supported(VkPhysicalDevice p_physical, VkFormat p_format,
                       VkImageUsageFlags p_usage, bool &r_dedicated) {
   VkPhysicalDeviceExternalImageFormatInfo external = {};
@@ -241,7 +231,6 @@ void destroy_slots(RenderingDevice *p_rd, SlotList &p_slots) {
   p_slots.clear();
 }
 
-// Creates a D3D11 shared texture and imports it into Vulkan as an RD texture.
 std::unique_ptr<Slot> create_slot(RenderingDevice *p_rd,
                                   SpoutD3D11Device &p_d3d11, uint32_t p_width,
                                   uint32_t p_height, uint32_t p_dxgi_format,
@@ -253,8 +242,7 @@ std::unique_ptr<Slot> create_slot(RenderingDevice *p_rd,
     r_error = "unsupported format";
     return nullptr;
   }
-  // Preferred usage first; drop STORAGE (only needed for the optional
-  // processing pass) if the driver can't import with it.
+  // STORAGE is optional (compute pass only).
   const VkImageUsageFlags base = VK_IMAGE_USAGE_SAMPLED_BIT |
                                  VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                                  VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -474,8 +462,7 @@ bool SpoutVulkanSender::ensure(uint32_t p_width, uint32_t p_height,
 
 bool SpoutVulkanSender::publish(SpoutGodotAccess p_access,
                                 SpoutShareSender &p_share) {
-  // Godot already wrote the shared texture in the frame it just submitted.
-  // (Holding the access mutex here would not order anything on the GPU.)
+  // Godot wrote the shared texture in the frame it just submitted.
   return _shared != nullptr && p_access != SPOUT_ACCESS_NONE;
 }
 
@@ -512,8 +499,7 @@ bool SpoutVulkanReceiver::open(const SpoutSenderInfo &p_info, String &r_error) {
   if (!_d3d11->open_shared_texture(p_info.share_handle, &_shared, r_error)) {
     return false;
   }
-  // Use the format of the texture itself; what senders advertise is
-  // sometimes wrong.
+  // Advertised formats are sometimes wrong.
   D3D11_TEXTURE2D_DESC desc = {};
   _shared->GetDesc(&desc);
   const uint32_t dxgi = spout_dxgi_normalize(desc.Format);

@@ -16,8 +16,7 @@ using namespace godot;
 
 namespace {
 
-// After a failure (no backend, texture too large, ...) don't retry every
-// frame; once a second is plenty and keeps the log readable.
+// Retry interval after a failure.
 constexpr uint64_t RETRY_DELAY_MSEC = 1000;
 
 RenderingServer *rs() { return RenderingServer::get_singleton(); }
@@ -55,9 +54,8 @@ void process_releases() {
   }
 }
 
-// Render thread. s_render_frame = swap_buffers done so far, counted at
-// pre-draw: it always runs right before its draw, while the deferred
-// post-draw (multi-threaded renderer) may run after the next one.
+// Render thread. Swaps so far, counted at pre-draw (a deferred post-draw may
+// run after the next draw).
 uint64_t s_draws = 0;
 uint64_t s_render_frame = 0;
 
@@ -353,10 +351,7 @@ void SpoutSenderCore::release_resources() {
 }
 
 void SpoutSenderCore::publish_pending() {
-  // The copy recorded in the previous post-draw has been submitted with the
-  // frame Godot just finished; make it visible to receivers. If the target was
-  // re-created since (resize), that copy went into a texture that no longer
-  // exists, so drop it.
+  // Drop it if the target was re-created since.
   if (_pending_access == SPOUT_ACCESS_NONE || !_gpu ||
       _pending_generation != _gpu->get_generation()) {
     _pending_access = SPOUT_ACCESS_NONE;
@@ -481,8 +476,7 @@ void SpoutSenderCore::process_frame() {
 
   SpoutBlitOptions options = _cur.options;
   if (!_gpu->target_supports_storage() && options.needs_shader()) {
-    // Vulkan drivers that can't import shared textures with STORAGE usage:
-    // send unprocessed rather than nothing.
+    // No STORAGE import (some Vulkan drivers): send unprocessed.
     options = SpoutBlitOptions();
   }
   const SpoutGodotAccess access =
@@ -722,8 +716,7 @@ void SpoutReceiverCore::release_resources() {
 }
 
 bool SpoutReceiverCore::ensure_visible() {
-  // The texture materials sample. Same format as the source when we can copy;
-  // a storable format when the flip pass writes it.
+  // The source format if copyable, else a storable one.
   const RenderingDevice::DataFormat source_format = _gpu->get_source_format();
   RenderingDevice::DataFormat format = source_format;
   const bool shader =
@@ -751,15 +744,13 @@ bool SpoutReceiverCore::ensure_visible() {
   BitField<RenderingDevice::TextureUsageBits> usage =
       RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT |
       RenderingDevice::TEXTURE_USAGE_CAN_COPY_TO_BIT |
-      // Lets scripts read the received image (Texture2D.get_image()).
+      // For Texture2D.get_image().
       RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
   if (shader) {
     usage.set_flag(RenderingDevice::TEXTURE_USAGE_STORAGE_BIT);
   }
   fmt->set_usage_bits(usage);
-  // Godot creates an sRGB view of every Texture2DRD whose format has an sRGB
-  // variant (used by 3D materials with source_color). That view is only valid
-  // if the texture was created with the variant as a shareable format.
+  // Godot creates an sRGB view of Texture2DRD, which needs this.
   const RenderingDevice::DataFormat srgb = spout_rd_srgb_variant(format);
   if (srgb != RenderingDevice::DATA_FORMAT_MAX && !shader) {
     fmt->add_shareable_format(format);
@@ -784,8 +775,7 @@ bool SpoutReceiverCore::ensure_visible() {
 bool SpoutReceiverCore::connect_to(const SpoutSenderInfo &p_info) {
   String error;
   if (!_gpu->open(p_info, error)) {
-    // Don't retry the same texture every frame; wait for the sender to
-    // change it (or for the next slow poll).
+    // Report once per texture.
     if (_failed_handle != p_info.share_handle) {
       _last_error = "Spout sender \"" + p_info.name + "\": " + error;
       spout_warn(_last_error);
@@ -869,8 +859,8 @@ void SpoutReceiverCore::process_frame() {
     _state = STATE_WAITING;
   }
 
-  // Look up the sender: every frame while connected (cheap, and how Spout's
-  // own receivers notice resizes and closes), otherwise at the poll interval.
+  // Every frame while connected (notices resizes and closes), else at the poll
+  // interval.
   const uint64_t now = spout_ticks_msec();
   if (_state != STATE_CONNECTED && now < _next_poll_msec) {
     return;
@@ -902,7 +892,6 @@ void SpoutReceiverCore::process_frame() {
       return;
     }
   }
-  // The flip setting changed: the visible texture may need another format.
   if ((_cur.options.needs_shader() || !_gpu->source_supports_copy()) !=
       _visible_flip) {
     if (!ensure_visible()) {
@@ -941,8 +930,7 @@ void SpoutReceiverCore::present() {
   const bool first = _last_access == SPOUT_ACCESS_NONE;
   _last_access = access;
   if (first) {
-    // That was the priming pass (see SpoutD3D12Receiver::acquire): copy the
-    // real frame next time even if the sender doesn't signal a new one.
+    // Priming pass: copy the real frame next time.
     _force_next = true;
     return;
   }

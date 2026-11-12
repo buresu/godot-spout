@@ -50,8 +50,7 @@ RenderingDevice::DataFormat godot::spout_dxgi_to_rd(uint32_t p_dxgi_format) {
   case SPOUT_DXGI_R8G8B8A8_UNORM:
     return RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM;
   case SPOUT_DXGI_R10G10B10A2_UNORM:
-    // DXGI R10G10B10A2 has R in the low bits, which is Vulkan/RD's
-    // A2B10G10R10_PACK32 (components listed from the high bits).
+    // Same bit layout (RD lists components from the high bits).
     return RenderingDevice::DATA_FORMAT_A2B10G10R10_UNORM_PACK32;
   case SPOUT_DXGI_R16G16B16A16_FLOAT:
     return RenderingDevice::DATA_FORMAT_R16G16B16A16_SFLOAT;
@@ -141,7 +140,6 @@ String godot::spout_dxgi_format_name(uint32_t p_dxgi_format) {
 }
 
 bool godot::spout_env_flag(const char *p_name) {
-  // Plain getenv so this also works before Godot's OS singleton is usable.
   const char *v = std::getenv(p_name);
   return v && v[0] && !(v[0] == '0' && v[1] == 0);
 }

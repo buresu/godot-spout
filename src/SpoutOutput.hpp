@@ -75,7 +75,7 @@ private:
 
   std::shared_ptr<SpoutSenderCore> _core;
   bool _running = false;
-  // OpenGL: the viewport whose render target backs _texture, if any.
+  // OpenGL: the viewport backing _texture.
   ObjectID _gl_viewport;
   uint64_t _gl_resolve_at_msec = 0;
 

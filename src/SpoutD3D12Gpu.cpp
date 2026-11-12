@@ -15,54 +15,18 @@
 
 using namespace godot;
 
-// Sync model (D3D12)
-// ==================
+// D3D11On12 runs on Godot's queue, so ordering is submission order and nothing
+// waits on the CPU.
+//   Sender: publish() (post-draw) copies the target Godot wrote in the frame
+//   just submitted to the shared texture. One frame of latency.
+//   Receiver: acquire() (pre-draw) copies the shared texture to _source before
+//   Godot submits the frame that reads it.
 //
-// Sender, frame N (frame_post_draw, after Godot submitted frame N):
-//   1. publish(): the copy into _target that Godot recorded during frame N-1's
-//      post-draw was part of frame N's submission. D3D11On12 now copies
-//      _target -> shared texture and Flush()es. That work goes onto Godot's
-//      queue *after* frame N, so it sees the finished copy.
-//   2. The core records the next texture_copy (or compute pass) from the
-//      source into _target. RD records it into frame N+1, i.e. after the
-//      D3D11On12 copy above on the same queue.
-// So there is exactly one frame of latency and no CPU wait anywhere.
-//
-// Receiver, frame N (frame_pre_draw, before Godot records frame N):
-//   acquire(): D3D11On12 copies shared texture -> _source and Flush()es before
-//   Godot submits frame N, which then reads _source. No latency.
-//
-// Resource states
-// ---------------
-// Godot and D3D11On12 both touch our texture (_target / _source), so Godot's
-// idea of its state must agree with what D3D11On12 does. Two cases:
-//
-// * Enhanced barriers
-// (D3D12_FEATURE_D3D12_OPTIONS12::EnhancedBarriersSupported,
-//   which Godot uses whenever the device has it). D3D11On12 records legacy
-//   ResourceBarriers, and mixing legacy and enhanced barriers on one texture
-//   is only legal while it is in the COMMON layout (debug layer: "layout
-//   ..._COPY_DEST does not support barrier interop"). Godot's graph would put
-//   the texture into COPY_DEST / COPY_SOURCE / ... layouts. So we create the
-//   resource ourselves with D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS and
-//   hand it to Godot with texture_create_from_extension(). Godot's driver
-//   emits no barriers for simultaneous-access textures
-//   (RenderingDeviceDriverD3D12::command_pipeline_barrier skips them), so the
-//   texture stays in COMMON, and we wrap it with InState = OutState = COMMON.
-//   Ordering between Godot's command lists and ours comes from the queue:
-//   separate ExecuteCommandLists calls on one queue complete in order with
-//   caches flushed in between.
-//
-// * Legacy barriers (older drivers/GPUs). Godot tracks a legacy state per
-//   texture. We wrap with InState = OutState = the state Godot's last access
-//   left the texture in (see state_for()), so its bookkeeping stays true. One
-//   wrapped resource is kept per state because states are fixed at wrap time.
-//   This path is not exercised on the development machine (it has enhanced
-//   barriers).
-//
-// Cross-process sync with receivers/senders is Spout's: the access mutex
-// around the copy, and DXGI's implicit synchronisation of legacy shared
-// resources at Flush(). That is exactly what spoutDX does.
+// States: with enhanced barriers, D3D11On12's legacy barriers are only legal in
+// COMMON, so we create the texture with ALLOW_SIMULTANEOUS_ACCESS (Godot emits
+// no barriers for it) and wrap it in COMMON. With legacy barriers, it is
+// wrapped in the state Godot's last access left it in, one wrapper per state.
+// The legacy path is untested.
 
 namespace {
 
@@ -97,8 +61,7 @@ bool has_enhanced_barriers(ID3D12Device *p_device) {
          options.EnhancedBarriersSupported;
 }
 
-// Creates the texture shared between Godot and D3D11On12 (see "Resource
-// states" above). r_owned is set when we own the D3D12 resource.
+// r_owned is set when we own the D3D12 resource.
 RID create_texture(RenderingDevice *p_rd, uint32_t p_width, uint32_t p_height,
                    RenderingDevice::DataFormat p_rd_format,
                    uint32_t p_dxgi_format, bool p_storage,
@@ -152,8 +115,7 @@ RID create_texture(RenderingDevice *p_rd, uint32_t p_width, uint32_t p_height,
     return rid;
   }
 
-  // Legacy barriers: let Godot create and track the texture. No shareable
-  // formats: we never need views of another format.
+  // Legacy barriers: Godot creates and tracks it.
   Ref<RDTextureFormat> fmt;
   fmt.instantiate();
   fmt->set_format(p_rd_format);
@@ -171,7 +133,6 @@ void free_texture(RenderingDevice *p_rd, RID &p_rid, ID3D12Resource *&p_owned) {
     p_rid = RID();
   }
   if (p_owned) {
-    // The frame Godot is recording may still copy into / out of it.
     ID3D12Resource *resource = p_owned;
     spout_defer_release([resource]() { resource->Release(); });
     p_owned = nullptr;
@@ -199,20 +160,15 @@ template <typename T> void safe_release(T *&p) {
   }
 }
 
-// One copy through D3D11On12. p_wrapped is acquired for the duration of the
-// copy, which emits the D3D12 barriers into the 11-on-12 command list.
 void copy_on12(SpoutD3D11Device &p_d3d11, ID3D11Resource *p_dst,
                ID3D11Resource *p_src, ID3D11Resource *p_wrapped) {
   p_d3d11.on12()->AcquireWrappedResources(&p_wrapped, 1);
   p_d3d11.context()->CopyResource(p_dst, p_src);
   p_d3d11.on12()->ReleaseWrappedResources(&p_wrapped, 1);
-  // Submit to Godot's queue now; also required for legacy shared resources so
-  // the other process sees the update.
   p_d3d11.context()->Flush();
 }
 
-// Access mutex timeout. Receivers hold the mutex only while they submit a
-// copy (microseconds); never stall Godot's frame on a stuck receiver.
+// Never stall Godot's frame on a stuck peer.
 constexpr uint32_t MUTEX_TIMEOUT_MS = 4;
 
 } // namespace
@@ -249,8 +205,6 @@ bool SpoutD3D12Sender::ensure(uint32_t p_width, uint32_t p_height,
   }
   release();
 
-  // Our own target: Godot writes it (texture_copy or the compute pass), and
-  // D3D11On12 reads it. Typed format, never TYPELESS.
   _target = create_texture(
       _rd, p_width, p_height, spout_send_format_to_rd(p_format),
       spout_send_format_to_dxgi(p_format), true, &_owned, &_simultaneous);
@@ -306,8 +260,7 @@ bool SpoutD3D12Sender::publish(SpoutGodotAccess p_access,
 }
 
 void SpoutD3D12Sender::release() {
-  // Release the D3D11 views of _target before Godot frees it. D3D11On12 and
-  // RD both defer the real destruction until the GPU is done with it.
+  // D3D11 views before the D3D12 texture.
   safe_release(_wrapped_copy);
   safe_release(_wrapped_shader);
   safe_release(_shared);
@@ -338,8 +291,7 @@ bool SpoutD3D12Receiver::open(const SpoutSenderInfo &p_info, String &r_error) {
     return false;
   }
 
-  // Use the format of the texture itself; what senders advertise is
-  // sometimes wrong (spoutDX does the same check).
+  // Advertised formats are sometimes wrong.
   D3D11_TEXTURE2D_DESC desc = {};
   _shared->GetDesc(&desc);
   const uint32_t dxgi = spout_dxgi_normalize(desc.Format);
@@ -351,9 +303,6 @@ bool SpoutD3D12Receiver::open(const SpoutSenderInfo &p_info, String &r_error) {
     return false;
   }
 
-  // Same memory layout as the sender's texture so D3D11 CopyResource is
-  // valid. (The old code always used BGRA8, which is an invalid copy from
-  // RGBA8 / RGBA16F senders.)
   _source = create_texture(_rd, desc.Width, desc.Height, _source_format, dxgi,
                            false, &_owned, &_simultaneous);
   if (!_source.is_valid()) {
@@ -393,10 +342,7 @@ bool SpoutD3D12Receiver::acquire(SpoutGodotAccess p_last_access,
     return false;
   }
   if (p_last_access == SPOUT_ACCESS_NONE && !_simultaneous) {
-    // Legacy barriers: Godot hasn't read _source yet, so we don't know which
-    // state its tracker has it in. Skip the copy this once; the core still
-    // issues its read so the state becomes known for the next frame. The core
-    // doesn't show the texture before the first real frame.
+    // Legacy barriers: _source's state is unknown until Godot's first read.
     return false;
   }
   ID3D11Resource *wrapped = wrapped_for(p_last_access);

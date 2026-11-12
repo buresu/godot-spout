@@ -1,13 +1,7 @@
 #pragma once
 
-// The Godot-side half of every transfer: records "source -> destination" into
-// the frame RenderingDevice is currently recording, either as a plain
-// texture_copy (when nothing has to change) or as a small compute pass that
-// can flip, force alpha to 1, convert between linear and sRGB encoding, and
-// convert formats.
-//
-// Because this runs through RenderingDevice, Godot inserts all barriers and
-// tracks all resource states / image layouts itself.
+// Records source -> destination in the current RD frame: a texture_copy, or a
+// compute pass for flip, opaque alpha, sRGB and format conversion.
 
 #include <cstdint>
 #include <map>
@@ -40,13 +34,11 @@ public:
   explicit SpoutBlit(RenderingDevice *p_rd);
   ~SpoutBlit();
 
-  // Records the transfer. Returns how Godot accessed both textures, or
-  // SPOUT_ACCESS_NONE if neither a copy nor the compute pass is possible (the
-  // reason is printed once).
+  // SPOUT_ACCESS_NONE if neither a copy nor the compute pass works.
   SpoutGodotAccess run(const RID &p_source, const RID &p_dest,
                        const SpoutBlitOptions &p_options);
 
-  // True if the compute pass can write this format (image2D qualifier).
+  // The compute pass can write this format.
   static bool can_store(RenderingDevice::DataFormat p_format);
 
   void release();

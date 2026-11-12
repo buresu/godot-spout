@@ -36,15 +36,11 @@ void SpoutTexture::_shutdown() {
     return;
   }
   _running = false;
-  // A resource can outlive the RenderingServer (e.g. held by a script
-  // constant until the very end); then there is nothing left to release.
   if (!spout_rendering_available()) {
     _core->detach();
     return;
   }
-  // The release clears this texture, so wait for it while this object is
-  // intact. force_sync() off the main thread would run render commands on
-  // the calling thread with the default thread model.
+  // The release clears this texture: wait while it's intact (main thread only).
   spout_core_stop(_core);
   RenderingServer *rs = RenderingServer::get_singleton();
   if (!rs->is_on_render_thread() && spout_is_main_thread()) {

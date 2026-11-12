@@ -76,7 +76,7 @@ const char *format_qualifier(RenderingDevice::DataFormat p_format) {
   case RenderingDevice::DATA_FORMAT_A2B10G10R10_UNORM_PACK32:
     return "rgb10_a2";
   default:
-    // BGRA8 has no image format qualifier and isn't reliably storable.
+    // BGRA8 has no image format qualifier.
     return nullptr;
   }
 }
@@ -167,8 +167,6 @@ SpoutGodotAccess SpoutBlit::run(const RID &p_source, const RID &p_dest,
   const auto src_usage = src->get_usage_bits();
   const auto dst_usage = dst->get_usage_bits();
 
-  // A plain copy is cheapest and keeps the D3D12 states simple (see
-  // SpoutD3D12Gpu.cpp), so use it whenever nothing has to change.
   const bool can_copy =
       !p_options.needs_shader() && same_size &&
       src->get_samples() == RenderingDevice::TEXTURE_SAMPLES_1 &&
@@ -181,8 +179,6 @@ SpoutGodotAccess SpoutBlit::run(const RID &p_source, const RID &p_dest,
     return err == OK ? SPOUT_ACCESS_COPY : SPOUT_ACCESS_NONE;
   }
 
-  // Compute pass: needs a sampled source of the same size and a storable
-  // destination.
   const Pipeline *pipeline = nullptr;
   if (same_size && (src_usage & RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT) &&
       (dst_usage & RenderingDevice::TEXTURE_USAGE_STORAGE_BIT)) {
@@ -208,8 +204,7 @@ SpoutGodotAccess SpoutBlit::run(const RID &p_source, const RID &p_dest,
     _sampler = _rd->sampler_create(state);
   }
 
-  // Uniform sets are freed by RD automatically when a texture they reference
-  // is freed, so check validity rather than tracking frees ourselves.
+  // RD frees uniform sets along with their textures.
   if (!_uniform_set.is_valid() || !_rd->uniform_set_is_valid(_uniform_set) ||
       _set_source != p_source || _set_dest != p_dest) {
     if (_uniform_set.is_valid() && _rd->uniform_set_is_valid(_uniform_set)) {

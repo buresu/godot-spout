@@ -1,11 +1,7 @@
 #pragma once
 
-// Small helpers shared by all godot-spout classes: logging, pixel format
-// mapping between DXGI (what Spout advertises), Godot's RenderingDevice and
-// Vulkan, and environment switches for diagnostics.
-//
-// This header deliberately does not include <windows.h> or any Spout header so
-// that it can be used from the Godot-facing classes.
+// Logging, DXGI/RD format mapping and diagnostics. Keep <windows.h> and Spout
+// headers out of here.
 
 #include <cstdint>
 #include <functional>
@@ -15,8 +11,7 @@
 
 namespace godot {
 
-// Values of DXGI_FORMAT that godot-spout produces or accepts. Kept as plain
-// integers so callers don't need dxgiformat.h.
+// DXGI_FORMAT values we use, without dxgiformat.h.
 enum SpoutDxgiFormat : uint32_t {
   SPOUT_DXGI_UNKNOWN = 0,
   SPOUT_DXGI_R32G32B32A32_FLOAT = 2,
@@ -37,53 +32,43 @@ enum SpoutDxgiFormat : uint32_t {
   SPOUT_D3DFMT_X8R8G8B8 = 22,
 };
 
-// Pixel format of what a sender publishes.
 enum SpoutSendFormat {
   SPOUT_SEND_FORMAT_AUTO = 0, // RGBA16F for float sources, else RGBA8
   SPOUT_SEND_FORMAT_RGBA8 = 1,
   SPOUT_SEND_FORMAT_RGBA16F = 2,
 };
 
-// Normalises what a sender advertises (TYPELESS, DX9 or sRGB variants) to the
-// typed DXGI format we create or copy as. Returns SPOUT_DXGI_UNKNOWN for
-// formats godot-spout can't receive.
+// Typed format for TYPELESS/DX9/sRGB variants; UNKNOWN if unsupported.
 uint32_t spout_dxgi_normalize(uint32_t p_dxgi_format);
 
-// Godot RD format with the same memory layout as a (normalised) DXGI format.
 RenderingDevice::DataFormat spout_dxgi_to_rd(uint32_t p_dxgi_format);
 
-// DXGI format for a send format; RGBA8 is R8G8B8A8_UNORM (see SpoutSender.cpp
-// for why not BGRA).
+// RGBA8 is R8G8B8A8_UNORM: BGRA8 isn't storable by the compute pass.
 uint32_t spout_send_format_to_dxgi(SpoutSendFormat p_format);
 RenderingDevice::DataFormat spout_send_format_to_rd(SpoutSendFormat p_format);
 
-// Resolves AUTO against the source texture's format.
 SpoutSendFormat spout_resolve_send_format(SpoutSendFormat p_requested,
                                           RenderingDevice::DataFormat p_source);
 
-// True if two RD formats can be copied with texture_copy (same memory layout;
-// UNORM and sRGB variants of the same layout count as equal).
+// Same memory layout (UNORM and sRGB count as equal).
 bool spout_rd_formats_copy_compatible(RenderingDevice::DataFormat p_a,
                                       RenderingDevice::DataFormat p_b);
 
-// sRGB variant of an 8-bit RD format, or DATA_FORMAT_MAX if there is none.
+// DATA_FORMAT_MAX if there is none.
 RenderingDevice::DataFormat
 spout_rd_srgb_variant(RenderingDevice::DataFormat p);
 
 String spout_dxgi_format_name(uint32_t p_dxgi_format);
 
-// Diagnostics, switched on by environment variables (read once):
-//   GODOT_SPOUT_LOG=1          Spout's own log, written to godot-spout.log in
-//                              %APPDATA%/Spout (see SpoutUtils).
-//   GODOT_SPOUT_VERBOSE=1      godot-spout's own messages printed always, not
-//                              only with --verbose.
-//   GODOT_SPOUT_D3D12_DEBUG=1  read and print the D3D12 / D3D11 debug-layer
-//                              messages (needs --gpu-validation).
+// Environment switches (read once):
+//   GODOT_SPOUT_LOG=1          Spout's log to %APPDATA%/Spout/godot-spout.log
+//   GODOT_SPOUT_VERBOSE=1      print our messages without --verbose
+//   GODOT_SPOUT_D3D12_DEBUG=1  print debug-layer messages (--gpu-validation)
 bool spout_env_flag(const char *p_name);
 void spout_diagnostics_init();
 
 void spout_log(const String &p_message);
-// Always printed (one-off facts users need for bug reports, e.g. the GPU).
+// Always printed.
 void spout_info(const String &p_message);
 void spout_warn(const String &p_message);
 void spout_error(const String &p_message);
@@ -91,12 +76,8 @@ void spout_error(const String &p_message);
 uint64_t spout_ticks_usec();
 uint64_t spout_ticks_msec();
 
-// Runs p_release once Godot has drawn SPOUT_RELEASE_DELAY_FRAMES more frames.
-// Used for GPU objects we own (D3D12 resources, Vulkan images) whose RD view
-// was just freed: the frame Godot is recording, and the ones in flight, may
-// still reference them. Never waits. Pending releases are pumped on the render
-// thread after each frame; whatever is left at module shutdown is left to the
-// OS (the process is exiting).
+// Runs p_release SPOUT_RELEASE_DELAY_FRAMES frames later, when frames in flight
+// no longer use the object. Leftovers at shutdown are left to the OS.
 constexpr int SPOUT_RELEASE_DELAY_FRAMES = 4;
 void spout_defer_release(std::function<void()> p_release);
 void spout_pump_deferred_releases();

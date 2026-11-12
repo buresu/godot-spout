@@ -1,8 +1,6 @@
 #pragma once
 
-// Shared GDScript API of the two receiver classes (SpoutInput, SpoutTexture).
-// Both own a SpoutReceiverCore; these helpers keep their bindings, signals and
-// inspector behaviour identical.
+// GDScript API shared by SpoutInput and SpoutTexture.
 
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/property_info.hpp>
@@ -12,8 +10,7 @@
 
 namespace godot {
 
-// Inspector suggestions for channel_name: the senders running right now. A
-// free-text name (for a sender that isn't running yet) is still allowed.
+// Suggests running senders; any name is still allowed.
 inline void spout_receiver_validate_channel(PropertyInfo &p_property) {
   if (p_property.name != StringName("channel_name")) {
     return;
@@ -43,8 +40,6 @@ template <typename T> void spout_receiver_connect_events(T *p_owner) {
       });
 }
 
-// Methods, properties, constants and signals both classes share. T must
-// provide the listed getters/setters.
 template <typename T> void spout_receiver_bind(const char *p_class) {
   ClassDB::bind_static_method(p_class, D_METHOD("get_sender_list"),
                               &spout_get_sender_list);
@@ -112,7 +107,6 @@ template <typename T> void spout_receiver_bind(const char *p_class) {
 
 } // namespace godot
 
-// Status getters both receiver classes implement by forwarding to the core.
 #define SPOUT_RECEIVER_STATUS_METHODS                                          \
   bool is_sender_connected() const {                                           \
     return _core->get_status().state == SpoutReceiverCore::STATE_CONNECTED;    \

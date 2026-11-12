@@ -1,6 +1,6 @@
 #pragma once
 
-// D3D12 backend (always built). See SpoutD3D12Gpu.cpp for the sync model.
+// D3D12 backend (always built).
 
 #include "SpoutGpu.hpp"
 
@@ -38,8 +38,7 @@ private:
   RenderingDevice *_rd = nullptr;
   std::shared_ptr<SpoutD3D11Device> _d3d11;
   RID _target;
-  // Set when we created the resource ourselves (simultaneous access, see
-  // SpoutD3D12Gpu.cpp); then we own it and Godot only has a view of it.
+  // Our simultaneous-access resource; Godot only has a view of it.
   ID3D12Resource *_owned = nullptr;
   bool _simultaneous = false;
   ID3D11Resource *_wrapped_copy = nullptr;
@@ -84,7 +83,6 @@ private:
   ID3D11Resource *_wrapped_shader = nullptr;
 };
 
-// Shared helper: Godot's D3D12 device and queue as D3D11On12 wants them.
 std::shared_ptr<SpoutD3D11Device> spout_d3d12_get_device(RenderingDevice *p_rd);
 
 } // namespace godot

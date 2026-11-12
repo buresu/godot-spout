@@ -1,21 +1,9 @@
 #pragma once
 
-// Shared D3D11 devices used to create and copy Spout's shared textures.
-//
-// Spout shares textures through legacy (KMT) DXGI shared handles created by
-// D3D11. Such a handle only opens on the GPU that created it, so every D3D11
-// device here is created on the same adapter as Godot's rendering device:
-//
-//   * D3D12 driver: a D3D11On12 device layered on Godot's own ID3D12Device and
-//     command queue. Its work is submitted to Godot's queue, so GPU ordering
-//     with Godot's frames is the queue's submission order.
-//   * Vulkan driver: a plain D3D11 device on the DXGI adapter whose LUID
-//     matches Godot's VkPhysicalDevice.
-//
-// One device is shared by all senders and receivers (one D3D11On12 device per
-// node was heavyweight and was re-created every frame while a receiver waited).
-// Devices are reference counted with shared_ptr and destroyed
-// when the last user releases them.
+// D3D11 devices for Spout's KMT shared textures, on Godot's adapter (the
+// handles only open on the GPU that created them): D3D11On12 on Godot's queue
+// for D3D12, a plain device matching the VkPhysicalDevice LUID for Vulkan.
+// One refcounted device is shared by all nodes.
 
 #include <cstdint>
 #include <memory>
@@ -48,20 +36,17 @@ public:
   ID3D11On12Device *on12() const { return _on12; }
   const String &adapter_name() const { return _adapter_name; }
 
-  // Creates a texture other processes can open through its legacy shared
-  // handle (D3D11_RESOURCE_MISC_SHARED, like spoutDirectX does). Bind flags
-  // render target + shader resource are what DX9/DX11 receivers expect.
+  // Legacy shared handle, as spoutDirectX creates it.
   bool create_shared_texture(uint32_t p_width, uint32_t p_height,
                              uint32_t p_dxgi_format,
                              ID3D11Texture2D **r_texture,
                              uint64_t *r_handle) const;
 
-  // Opens a sender's shared texture. Fails if it lives on another adapter.
+  // Fails if the texture is on another adapter.
   bool open_shared_texture(uint64_t p_handle, ID3D11Texture2D **r_texture,
                            String &r_error) const;
 
-  // Prints and clears D3D11 / D3D12 debug-layer messages if
-  // GODOT_SPOUT_D3D12_DEBUG is set. p_where names the call site.
+  // Only with GODOT_SPOUT_D3D12_DEBUG.
   void drain_debug_messages(const char *p_where) const;
 
 private:

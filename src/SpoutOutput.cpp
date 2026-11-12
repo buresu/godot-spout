@@ -12,7 +12,6 @@ using namespace godot;
 
 void SpoutOutput::_bind_methods() {
 
-  // Bind methods
   ClassDB::bind_method(D_METHOD("get_channel_name"),
                        &SpoutOutput::get_channel_name);
   ClassDB::bind_method(D_METHOD("set_channel_name", "name"),
@@ -59,7 +58,6 @@ void SpoutOutput::_bind_methods() {
   ClassDB::bind_method(D_METHOD("get_adapter_name"),
                        &SpoutOutput::get_adapter_name);
 
-  // Add properties
   ClassDB::add_property("SpoutOutput", {Variant::STRING, "channel_name"},
                         "set_channel_name", "get_channel_name");
   ClassDB::add_property(
@@ -110,8 +108,7 @@ void SpoutOutput::_bind_methods() {
 SpoutOutput::SpoutOutput()
     : Node(), _core(std::make_shared<SpoutSenderCore>()) {
   _core->set_name(_channel_name);
-  // Events are reported on the render thread; signals are emitted on the
-  // main thread through call_deferred.
+  // Events come from the render thread.
   _core->set_event_handler([this](SpoutSenderCore::Event p_event,
                                   const String &p_name,
                                   const Vector2i &p_size) {
@@ -137,7 +134,6 @@ SpoutOutput::~SpoutOutput() {
 String SpoutOutput::get_channel_name() const { return _channel_name; }
 
 void SpoutOutput::set_channel_name(String p_name) {
-  // Takes effect with the next frame; the sender is renamed in place.
   _channel_name = p_name;
   _core->set_name(p_name);
 }
@@ -145,8 +141,6 @@ void SpoutOutput::set_channel_name(String p_name) {
 Ref<Texture2D> SpoutOutput::get_texture() const { return _texture; }
 
 void SpoutOutput::set_texture(Ref<Texture2D> p_texture) {
-  // Switching the source keeps the sender (and its shared texture, if the
-  // size and format match), so receivers don't see it disappear.
   _texture = p_texture;
   _gl_viewport = ObjectID();
   _gl_resolve_at_msec = 0;
@@ -155,8 +149,6 @@ void SpoutOutput::set_texture(Ref<Texture2D> p_texture) {
 
 void SpoutOutput::set_enabled(bool p_enabled) {
   _enabled = p_enabled;
-  // Disabling unregisters the sender at the next frame but keeps the GPU
-  // resources, so enabling again is instant.
   _core->set_enabled(p_enabled);
 }
 
@@ -278,13 +270,10 @@ void SpoutOutput::_stop() {
   if (is_inside_tree()) {
     set_process_internal(false);
   }
-  // Unregisters the sender and frees the GPU resources (scene change, node
-  // freed, quit).
   spout_core_stop(_core);
 }
 
 void SpoutOutput::_sync_source() {
-  // Main thread: the core (render thread) only gets RIDs and sizes.
   if (_texture.is_null()) {
     _core->set_texture(RID());
     _core->set_gl_source(RID(), Vector2i());
@@ -299,11 +288,8 @@ void SpoutOutput::_sync_source() {
 }
 
 void SpoutOutput::_resolve_gl_source() {
-  // In the Compatibility renderer, a ViewportTexture's RID is a proxy that
-  // has no GL texture name (texture_get_native_handle returns 0), so the old
-  // code never sent viewports on OpenGL. Find the viewport the texture
-  // belongs to and send its render target instead. RD drivers don't need
-  // this: texture_get_rd_texture resolves proxies.
+  // A ViewportTexture's GL RID is a proxy without a GL name; send the
+  // viewport's render target instead.
   RenderingServer *rs = RenderingServer::get_singleton();
   Viewport *viewport =
       Object::cast_to<Viewport>(ObjectDB::get_instance(_gl_viewport));

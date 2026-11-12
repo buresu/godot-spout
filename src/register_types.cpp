@@ -27,9 +27,8 @@ void uninitialize_spout_module(ModuleInitializationLevel p_level) {
     return;
   }
 
-  // Release whatever is still alive (e.g. SpoutTexture resources held until
-  // exit) while the RenderingServer still exists: unregisters the senders and
-  // frees the shared D3D11 devices before Godot destroys its GPU device.
+  // Release what's still alive (e.g. SpoutTexture) before Godot's GPU device
+  // goes away.
   spout_cores_shutdown();
 }
 

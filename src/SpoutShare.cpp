@@ -13,24 +13,19 @@ using namespace godot;
 
 namespace {
 
-// Spout's names for the per-sender access mutex. Must match
-// spoutFrameCount::CreateAccessMutex so other Spout applications use the same
-// object.
+// Same name as spoutFrameCount::CreateAccessMutex.
 std::string access_mutex_name(const char *p_sender) {
   return std::string(p_sender) + "_SpoutAccessMutex";
 }
 
 bool wait_mutex(HANDLE p_mutex, uint32_t p_timeout_ms) {
   if (!p_mutex) {
-    // Senders without a mutex exist (old SDKs); behave like Spout and don't
-    // block.
+    // Old SDK senders have no mutex.
     return true;
   }
   switch (WaitForSingleObject(p_mutex, p_timeout_ms)) {
   case WAIT_OBJECT_0:
-    return true;
   case WAIT_ABANDONED:
-    // The previous owner exited without releasing it. We own it now.
     return true;
   default:
     return false;
@@ -40,8 +35,7 @@ bool wait_mutex(HANDLE p_mutex, uint32_t p_timeout_ms) {
 } // namespace
 
 PackedStringArray godot::spout_get_sender_list() {
-  // spoutSenderNames keeps no per-instance state that matters for reading the
-  // name list, but constructing it reads the registry; keep one around.
+  // Constructing spoutSenderNames reads the registry; keep one.
   static std::mutex s_lock;
   static spoutSenderNames *s_names = nullptr;
   std::lock_guard<std::mutex> guard(s_lock);
@@ -78,9 +72,7 @@ bool SpoutShareSender::publish(const String &p_requested_name,
   HANDLE handle = reinterpret_cast<HANDLE>(p_share_handle);
 
   if (_registered && p_requested_name == _requested_name) {
-    // Same sender, new texture (resize or format change). Receivers notice the
-    // new share handle in the shared memory and re-open it; the sender stays
-    // in the list, so Resolume keeps the source selected.
+    // Keeps the sender listed, so receivers keep it selected.
     return _impl->names.UpdateSender(_impl->name, p_width, p_height, handle,
                                      p_dxgi_format);
   }
@@ -95,9 +87,7 @@ bool SpoutShareSender::publish(const String &p_requested_name,
   }
   strcpy_s(_impl->name, sizeof(_impl->name), utf8.get_data());
 
-  // CreateSender appends "_1", "_2", ... when the name is taken (for example
-  // by a sender left over from a crashed process) and writes the final name
-  // back into _impl->name.
+  // Writes back "<name>_1" etc. if the name is taken.
   if (!_impl->names.CreateSender(_impl->name, p_width, p_height, handle,
                                  p_dxgi_format)) {
     spout_error("Could not register Spout sender \"" + p_requested_name +
@@ -108,8 +98,7 @@ bool SpoutShareSender::publish(const String &p_requested_name,
 
   _impl->mutex =
       CreateMutexA(nullptr, FALSE, access_mutex_name(_impl->name).c_str());
-  // Creates the "<name>_Count_Semaphore" receivers use for new-frame
-  // detection and fps (only if frame counting is enabled in SpoutSettings).
+  // No-op unless frame counting is enabled in SpoutSettings.
   _impl->frame.EnableFrameCount(_impl->name);
 
   _requested_name = p_requested_name;
@@ -175,8 +164,6 @@ SpoutShareReceiver::PollResult
 SpoutShareReceiver::poll(const String &p_name, SpoutSenderInfo &r_info) {
   char name[256] = {};
   if (p_name.is_empty()) {
-    // Follow whatever SpoutSettings / the last started sender made active.
-    // Reading the active sender never changes it (unlike spoutVK receivers).
     if (!_impl->names.GetActiveSender(name)) {
       return POLL_NO_SENDER;
     }
@@ -198,9 +185,7 @@ SpoutShareReceiver::poll(const String &p_name, SpoutSenderInfo &r_info) {
 
   SpoutSenderInfo info;
   info.name = String::utf8(name);
-  // The handle is stored as 32 bits and sign-extended back, exactly like
-  // spoutDX::ReceiveSenderData does (LongToHandle). Legacy shared handles fit
-  // in 32 bits by design so 32- and 64-bit processes can share them.
+  // Stored as 32 bits; sign-extended like spoutDX::ReceiveSenderData.
   info.share_handle = reinterpret_cast<uint64_t>(
       LongToHandle(static_cast<long>(shared.shareHandle)));
   info.width = shared.width;
@@ -232,7 +217,7 @@ void SpoutShareReceiver::open_sync_objects(const String &p_name) {
     _impl->mutex = nullptr;
   }
   CharString utf8 = p_name.utf8();
-  // Open, don't create: a receiver must not own the sender's mutex object.
+  // Open, don't create: the mutex belongs to the sender.
   _impl->mutex = OpenMutexA(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE,
                             access_mutex_name(utf8.get_data()).c_str());
   _impl->frame.EnableFrameCount(utf8.get_data());
@@ -242,8 +227,6 @@ void SpoutShareReceiver::disconnect() {
   if (!_connected) {
     return;
   }
-  // Note: no Sleep() here. spoutDX::ReleaseReceiver waits 67 ms "in case the
-  // same sender opens again"; we simply keep polling instead.
   _impl->frame.CleanupFrameCount();
   if (_impl->mutex) {
     CloseHandle(_impl->mutex);

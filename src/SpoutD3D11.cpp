@@ -15,9 +15,6 @@
 #include <d3d12sdklayers.h>
 #include <dxgi1_4.h>
 
-// Note: <windows.h> maps GetMessage to GetMessageW. The info-queue headers
-// were parsed with that macro too, so q->GetMessage() below stays consistent.
-
 using namespace godot;
 
 namespace {
@@ -89,8 +86,6 @@ const char *severity_name12(D3D12_MESSAGE_SEVERITY p) {
 
 SpoutD3D11Device::~SpoutD3D11Device() {
   if (_context) {
-    // Submit anything still recorded before the device goes away. The D3D11
-    // runtime (and D3D11On12) keeps resources alive until the GPU is done.
     _context->ClearState();
     _context->Flush();
   }
@@ -117,9 +112,7 @@ SpoutD3D11Device::get_on12(ID3D12Device *p_device, IUnknown *p_queue) {
     flags |= D3D11_CREATE_DEVICE_DEBUG;
   }
 
-  // Passing Godot's queue makes D3D11On12 submit its command lists to that
-  // queue. Everything we Flush() is therefore ordered after the Godot frame
-  // submitted before it and before the frame submitted after it.
+  // On Godot's queue, so each Flush() is ordered between Godot's frames.
   ID3D11Device *device = nullptr;
   ID3D11DeviceContext *context = nullptr;
   HRESULT hr = D3D11On12CreateDevice(p_device, flags, nullptr, 0, &p_queue, 1,
@@ -190,7 +183,6 @@ SpoutD3D11Device::get_for_luid(uint64_t p_luid) {
                                       D3D_FEATURE_LEVEL_11_0};
   ID3D11Device *device = nullptr;
   ID3D11DeviceContext *context = nullptr;
-  // D3D_DRIVER_TYPE_UNKNOWN is required when an explicit adapter is passed.
   hr = D3D11CreateDevice(adapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr, flags,
                          levels, 2, D3D11_SDK_VERSION, &device, nullptr,
                          &context);
@@ -231,12 +223,11 @@ bool SpoutD3D11Device::create_shared_texture(uint32_t p_width,
   desc.Height = p_height;
   desc.MipLevels = 1;
   desc.ArraySize = 1;
-  // Always a typed format. Godot's D3D12 render targets are TYPELESS, and the
-  // old code copied that format into the shared texture, so receivers were
-  // offered e.g. R8G8B8A8_TYPELESS.
+  // Typed: receivers don't handle TYPELESS.
   desc.Format = static_cast<DXGI_FORMAT>(p_dxgi_format);
   desc.SampleDesc.Count = 1;
   desc.Usage = D3D11_USAGE_DEFAULT;
+  // What DX9/DX11 receivers expect.
   desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
   desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
 
@@ -272,8 +263,7 @@ bool SpoutD3D11Device::open_shared_texture(uint64_t p_handle,
   HRESULT hr = _device->OpenSharedResource(reinterpret_cast<HANDLE>(p_handle),
                                            IID_PPV_ARGS(&texture));
   if (FAILED(hr) || !texture) {
-    // E_INVALIDARG is what an adapter mismatch looks like; a handle from a
-    // sender that just closed gives the same result.
+    // Adapter mismatch and a closed sender both give E_INVALIDARG.
     r_error = "could not open the sender's texture (0x" +
               String::num_int64(static_cast<uint32_t>(hr), 16) +
               "). The sender is probably running on a different GPU than "

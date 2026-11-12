@@ -1,6 +1,6 @@
 #pragma once
 
-// Vulkan backend (GODOT_SPOUT_ENABLE_VULKAN). See SpoutVulkanGpu.cpp.
+// Vulkan backend (GODOT_SPOUT_ENABLE_VULKAN).
 
 #ifdef GODOT_SPOUT_ENABLE_VULKAN
 

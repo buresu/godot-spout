@@ -1,19 +1,10 @@
 #pragma once
 
-// Per-node logic shared by the Godot classes:
-//   SpoutSenderCore   <- SpoutOutput
-//   SpoutReceiverCore <- SpoutInput, SpoutTexture
+// Per-node logic: SpoutSenderCore (SpoutOutput), SpoutReceiverCore
+// (SpoutInput, SpoutTexture). Failures retry with a back-off.
 //
-// A core owns its GPU backend for as long as the node is active. Failures
-// never destroy it; the core waits and retries with a back-off (the old code
-// destroyed and re-created the backend every frame while a receiver had no
-// sender).
-//
-// Threading: RenderingDevice may only be used on the render thread, but with
-// the multi-threaded renderer RenderingServer emits frame_pre/post_draw on the
-// main thread. So the scheduler (spout_core_start/stop) runs on_frame_*() and
-// release() on the render thread, setters/getters go through mutex-guarded
-// settings/status copies, and owner callbacks stop after detach().
+// Threading: on_frame_*() and release() run on the render thread, setters and
+// getters use mutex-guarded copies, and owner callbacks stop after detach().
 
 #include <cstdint>
 #include <functional>
@@ -36,15 +27,12 @@ class SpoutGpuSender;
 class SpoutGpuReceiver;
 class SpoutGLSender;
 
-// True while Godot's RenderingServer exists. Destructors check this before
-// touching it (a SpoutTexture resource can outlive the RenderingServer when
-// a script constant holds it).
+// A SpoutTexture can outlive the RenderingServer.
 bool spout_rendering_available();
 
 bool spout_is_main_thread();
 
-// Texture2DRD emits "changed" on the render thread, which scene nodes reject;
-// this re-emits it on the main thread.
+// Emits Texture2DRD's "changed" on the main thread.
 void spout_set_texture_rd(Texture2DRD *p_texture, const RID &p_rid);
 
 class SpoutCoreBase {
@@ -53,12 +41,11 @@ public:
 
   virtual void on_frame_pre_draw() {}
   virtual void on_frame_post_draw() {}
-  // Frees GPU resources and unregisters from Spout. The core can be used
-  // again afterwards (it re-creates everything lazily).
+  // Frees everything; the core can be reused.
   virtual void release() = 0;
 
-  // Stops owner callbacks; p_last runs under the same lock. Call before the
-  // owner is destroyed.
+  // Stops owner callbacks (p_last runs under the lock). Call before the owner
+  // is destroyed.
   void detach(const std::function<void()> &p_last = nullptr);
 
 protected:
@@ -108,7 +95,7 @@ public:
   void set_format(SpoutSendFormat p_format);
   void set_blit_options(const SpoutBlitOptions &p_options);
   void set_max_fps(double p_fps);
-  // OpenGL only (see SpoutOutput::_resolve_gl_source).
+  // OpenGL only.
   void set_gl_source(const RID &p_texture, const Vector2i &p_size);
 
   void on_frame_post_draw() override;
@@ -147,7 +134,7 @@ private:
   mutable std::mutex _status_lock;
   Status _status; // guarded by _status_lock
 
-  // Everything below is only touched on the render thread.
+  // Render thread only below.
   Settings _cur; // this frame's copy of _settings
   String _driver;
   RenderingDevice *_rd = nullptr;
@@ -156,7 +143,7 @@ private:
   std::unique_ptr<SpoutGLSender> _gl;
   SpoutShareSender _share;
 
-  // The frame recorded in the previous post-draw, published in this one.
+  // Recorded in the previous post-draw, published in this one.
   SpoutGodotAccess _pending_access = SPOUT_ACCESS_NONE;
   uint64_t _pending_generation = 0;
   uint64_t _published_generation = 0;
@@ -252,7 +239,7 @@ private:
   mutable std::mutex _status_lock;
   Status _status; // guarded by _status_lock
 
-  // Everything below is only touched on the render thread.
+  // Render thread only below.
   Settings _cur; // this frame's copy of _settings
   Ref<Texture2DRD> _target;
   String _driver;
