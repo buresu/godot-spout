@@ -387,6 +387,7 @@ ID3D11Resource *SpoutD3D12Receiver::wrapped_for(SpoutGodotAccess p_access) {
 }
 
 bool SpoutD3D12Receiver::acquire(SpoutGodotAccess p_last_access,
+                                 bool p_new_frame,
                                  SpoutShareReceiver &p_share) {
   if (!_shared || !_source.is_valid()) {
     return false;

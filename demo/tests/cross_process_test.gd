@@ -9,7 +9,10 @@ extends SceneTree
 ## Usage:
 ##   godot --path demo [--rendering-driver d3d12|vulkan] [--gpu-index N] \
 ##       -s res://tests/cross_process_test.gd -- --role=send|recv \
-##       --channel=NAME [--seconds=20] [--size=1920x1080] [--json=path]
+##       --channel=NAME [--seconds=20] [--size=1920x1080] [--json=path] \
+##       [--delay-ms=N]
+## --delay-ms adds N ms of CPU work per frame, which shifts when this process
+## samples or sends within the display refresh (sweep it to test timing).
 ## Prints "CROSS_RESULT <json>". Receiver exit code 0 = pass.
 
 var role := "send"
@@ -17,6 +20,7 @@ var channel := "gs-cross"
 var seconds := 20.0
 var size := Vector2i(640, 360)
 var json_path := ""
+var delay_ms := 0.0
 
 var vp: SubViewport
 var rect: ColorRect
@@ -26,7 +30,7 @@ var frame := 0
 var last := -1
 var stats := {
 	"frames": 0, "received": 0, "advanced": 0, "repeated": 0, "garbage": 0,
-	"longest_freeze_frames": 0, "connected_after_ms": -1, "state_at_end": -1,
+	"torn": 0, "longest_freeze_frames": 0, "connected_after_ms": -1, "state_at_end": -1,
 	"errors": [],
 }
 var freeze := 0
@@ -45,6 +49,8 @@ func _initialize() -> void:
 			size = Vector2i(int(p[0]), int(p[1]))
 		elif arg.begins_with("--json="):
 			json_path = arg.get_slice("=", 1)
+		elif arg.begins_with("--delay-ms="):
+			delay_ms = float(arg.get_slice("=", 1))
 	start_msec = Time.get_ticks_msec()
 	if role == "send":
 		vp = SubViewport.new()
@@ -72,6 +78,8 @@ func _initialize() -> void:
 
 func _process(_delta: float) -> bool:
 	frame += 1
+	if delay_ms > 0.0:
+		OS.delay_usec(int(delay_ms * 1000.0))
 	var elapsed := (Time.get_ticks_msec() - start_msec) / 1000.0
 	if role == "send":
 		var v := frame % 250 + 3
@@ -100,6 +108,16 @@ func _sample() -> void:
 	var c := img.get_pixel(img.get_width() / 2, img.get_height() / 2)
 	var r := c.r8
 	stats["received"] += 1
+	# Every row below the white band carries the same frame number; rows from
+	# different frames mean the receiver read while the sender was writing.
+	var lo := 255
+	var hi := 0
+	for i in range(2, 10):
+		var v := img.get_pixel(img.get_width() / 2, img.get_height() * i / 10 + 1).r8
+		lo = mini(lo, v)
+		hi = maxi(hi, v)
+	if hi - lo > 2:
+		stats["torn"] += 1
 	# The blue channel is 255 - red in every frame the sender drew; anything
 	# else is a torn, half-written or foreign frame.
 	if absi(c.b8 - (255 - r)) > 3 or r < 3 or r > 252:
@@ -124,7 +142,7 @@ func _finish() -> bool:
 	if role == "recv":
 		stats["state_at_end"] = node.call("get_receiver_state")
 		stats["sender_size"] = str(node.call("get_sender_size"))
-		ok = stats["received"] > 0 and stats["garbage"] == 0 and stats["advanced"] > stats["received"] * 0.5 and stats.get("top_is_white", false)
+		ok = stats["received"] > 0 and stats["garbage"] == 0 and stats["torn"] == 0 and stats["advanced"] > stats["received"] * 0.5 and stats.get("top_is_white", false)
 	else:
 		stats["frames_sent"] = node.call("get_frames_sent")
 		stats["frames_skipped"] = node.call("get_frames_skipped")

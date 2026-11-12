@@ -35,6 +35,12 @@ enum SpoutGodotAccess {
   SPOUT_ACCESS_SHADER,   // compute pass (storage write / sampled read)
 };
 
+// Frame RenderingDevice is recording (render thread). GPU work recorded in
+// p_frame is done once RD has waited for its fence, get_frame_delay() swaps
+// later.
+uint64_t spout_render_frame();
+bool spout_render_frame_done(RenderingDevice *p_rd, uint64_t p_frame);
+
 class SpoutGpuSender {
 public:
   virtual ~SpoutGpuSender() = default;
@@ -71,7 +77,7 @@ public:
   virtual ~SpoutGpuReceiver() = default;
 
   // Opens a sender's shared texture. On failure r_error says why (typically
-  // the sender is on another GPU, see plan §1.5).
+  // the sender is on another GPU).
   virtual bool open(const SpoutSenderInfo &p_info, String &r_error) = 0;
   virtual void close() = 0;
   virtual bool is_open() const = 0;
@@ -81,10 +87,16 @@ public:
   virtual RenderingDevice::DataFormat get_source_format() const = 0;
   virtual bool source_supports_copy() const = 0;
 
+  // Right after the previous frame was submitted: lets a backend start its
+  // copy early.
+  virtual void prefetch(SpoutGodotAccess p_last_access, bool p_new_frame,
+                        SpoutShareReceiver &p_share) {}
+
   // Makes the sender's newest frame available in get_source() for the frame
   // Godot is about to record. p_last_access is how Godot read the source in
-  // the previous frame. Returns false if nothing was updated this time.
-  virtual bool acquire(SpoutGodotAccess p_last_access,
+  // the previous frame; p_new_frame whether the sender signalled one. Returns
+  // false if nothing was updated this time.
+  virtual bool acquire(SpoutGodotAccess p_last_access, bool p_new_frame,
                        SpoutShareReceiver &p_share) = 0;
 
   virtual String get_adapter_name() const = 0;

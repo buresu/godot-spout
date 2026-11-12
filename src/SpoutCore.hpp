@@ -212,6 +212,7 @@ public:
   // SpoutInput.texture
   void set_target(const Ref<Texture2DRD> &p_target);
 
+  void on_frame_post_draw() override;
   void on_frame_pre_draw() override;
   void release() override;
 
@@ -230,6 +231,7 @@ private:
 
   void read_settings();
   void process_frame();
+  void present();
   void release_resources();
   void update_status();
   String get_sender_name() const;
@@ -267,6 +269,8 @@ private:
   bool _visible_flip = false;
   SpoutGodotAccess _last_access = SPOUT_ACCESS_NONE;
   bool _force_next = false;
+  bool _present = false; // process_frame() -> present()
+  bool _present_new = false;
   uint64_t _failed_handle = 0;
   uint64_t _next_poll_msec = 0;
   uint64_t _frames_received = 0;

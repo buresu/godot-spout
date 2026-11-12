@@ -55,7 +55,14 @@ void process_releases() {
   }
 }
 
+// Render thread. s_render_frame = swap_buffers done so far, counted at
+// pre-draw: it always runs right before its draw, while the deferred
+// post-draw (multi-threaded renderer) may run after the next one.
+uint64_t s_draws = 0;
+uint64_t s_render_frame = 0;
+
 void render_pre_draw() {
+  s_render_frame = s_draws++;
   process_releases();
   for (const auto &core : running_snapshot()) {
     core->on_frame_pre_draw();
@@ -63,6 +70,7 @@ void render_pre_draw() {
 }
 
 void render_post_draw() {
+  s_render_frame = s_draws;
   process_releases();
   for (const auto &core : running_snapshot()) {
     core->on_frame_post_draw();
@@ -111,6 +119,12 @@ bool godot::spout_rendering_available() {
   Engine *engine = Engine::get_singleton();
   return engine && engine->has_singleton("RenderingServer") &&
          RenderingServer::get_singleton() != nullptr;
+}
+
+uint64_t godot::spout_render_frame() { return s_render_frame; }
+
+bool godot::spout_render_frame_done(RenderingDevice *p_rd, uint64_t p_frame) {
+  return s_render_frame >= p_frame + p_rd->get_frame_delay();
 }
 
 bool godot::spout_is_main_thread() {
@@ -676,6 +690,7 @@ void SpoutReceiverCore::disconnect(bool p_emit) {
   }
   _share.disconnect();
   _last_access = SPOUT_ACCESS_NONE;
+  _present = false;
   if (_cur.clear_on_disconnect) {
     clear_shown();
   }
@@ -801,10 +816,17 @@ bool SpoutReceiverCore::connect_to(const SpoutSenderInfo &p_info) {
   return true;
 }
 
-void SpoutReceiverCore::on_frame_pre_draw() {
+// Started right after the previous frame, so asynchronous copies (Vulkan)
+// are done by present().
+void SpoutReceiverCore::on_frame_post_draw() {
   read_settings();
-  update_target();
   process_frame();
+  update_status();
+}
+
+void SpoutReceiverCore::on_frame_pre_draw() {
+  update_target();
+  present();
   update_status();
 }
 
@@ -892,9 +914,22 @@ void SpoutReceiverCore::process_frame() {
   if (!new_frame && !_force_next) {
     return;
   }
-  const bool updated = _gpu->acquire(_last_access, _share);
+  _gpu->prefetch(_last_access, new_frame, _share);
+  _present = true;
+  _present_new = new_frame;
+}
+
+void SpoutReceiverCore::present() {
+  if (!_present) {
+    return;
+  }
+  _present = false;
+  if (!_gpu || !_gpu->is_open() || _state != STATE_CONNECTED) {
+    return;
+  }
+  const bool updated = _gpu->acquire(_last_access, _present_new, _share);
   if (!updated && _last_access != SPOUT_ACCESS_NONE) {
-    // Mutex busy; try again next frame.
+    // Mutex busy or copy still running; try again next frame.
     _force_next = true;
     return;
   }
@@ -914,5 +949,5 @@ void SpoutReceiverCore::process_frame() {
   _force_next = false;
   _frames_received++;
   show(_visible);
-  emit(EVENT_FRAME, info.name);
+  emit(EVENT_FRAME, _share.get_info().name);
 }

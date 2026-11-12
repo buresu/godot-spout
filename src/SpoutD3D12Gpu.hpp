@@ -66,7 +66,7 @@ public:
     return _source_format;
   }
   bool source_supports_copy() const override { return true; }
-  bool acquire(SpoutGodotAccess p_last_access,
+  bool acquire(SpoutGodotAccess p_last_access, bool p_new_frame,
                SpoutShareReceiver &p_share) override;
   String get_adapter_name() const override;
 
