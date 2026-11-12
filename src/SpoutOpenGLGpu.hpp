@@ -39,6 +39,8 @@ private:
   std::unique_ptr<Spout> _spout;
   String _requested_name;
   bool _registered = false;
+  int _slow_sends = 0;
+  bool _finish_first = false;
 };
 
 } // namespace godot

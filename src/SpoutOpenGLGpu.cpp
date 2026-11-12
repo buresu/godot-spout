@@ -30,10 +30,24 @@ bool SpoutGLSender::send(uint64_t p_gl_texture, uint32_t p_width,
     _spout->SetSenderName(p_name.utf8().get_data());
     _requested_name = p_name;
   }
+  // Some drivers (AMD) wait for the vsync'd swap in wglDXUnlockObjectsNV while
+  // SpoutGL holds the access mutex, starving receivers. If so, wait first.
+  if (_finish_first) {
+    glFinish();
+  }
+  const uint64_t start = spout_ticks_usec();
   // SendTexture handles creation and resizing of the sender.
   const bool ok =
       _spout->SendTexture(static_cast<GLuint>(p_gl_texture), GL_TEXTURE_2D,
                           p_width, p_height, p_invert);
+  if (!_finish_first) {
+    _slow_sends = spout_ticks_usec() - start > 4000 ? _slow_sends + 1 : 0;
+    if (_slow_sends >= 10) {
+      _finish_first = true;
+      spout_log("SendTexture blocks in the GL/DX interop unlock; waiting for "
+                "GL before it from now on.");
+    }
+  }
   if (ok && !_registered) {
     _registered = true;
     spout_log("Registered OpenGL sender \"" + get_name() + "\"");
