@@ -37,8 +37,6 @@ endif()
 add_subdirectory("${PROJECT_SOURCE_DIR}/lib/Spout2" EXCLUDE_FROM_ALL)
 
 if(GODOT_SPOUT_ENABLE_VULKAN)
-    # Only the Vulkan headers and loader are needed: the interop code lives in
-    # src/SpoutVulkanGpu.cpp. lib/SpoutVulkan is no longer compiled.
     find_package(Vulkan REQUIRED)
 endif()
 
@@ -96,8 +94,4 @@ install(FILES
 install(FILES "${PROJECT_SOURCE_DIR}/lib/Spout2/LICENSE"
     DESTINATION "${GODOT_SPOUT_ADDON_DIR}/licenses"
     RENAME "Spout2-LICENSE"
-)
-install(FILES "${PROJECT_SOURCE_DIR}/lib/SpoutVulkan/LICENSE"
-    DESTINATION "${GODOT_SPOUT_ADDON_DIR}/licenses"
-    RENAME "SpoutVulkan-LICENSE"
 )

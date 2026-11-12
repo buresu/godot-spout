@@ -84,7 +84,6 @@ jobs:
             demo/addons/godot-spout/README.md
             demo/addons/godot-spout/LICENSE
             demo/addons/godot-spout/licenses/Spout2-LICENSE
-            demo/addons/godot-spout/licenses/SpoutVulkan-LICENSE
 
   release:
     name: Create Release
@@ -113,7 +112,6 @@ jobs:
           cp artifacts/README.md release/addons/godot-spout/
           cp artifacts/LICENSE release/addons/godot-spout/
           cp artifacts/licenses/Spout2-LICENSE release/addons/godot-spout/licenses/
-          cp artifacts/licenses/SpoutVulkan-LICENSE release/addons/godot-spout/licenses/
           cd release
           zip -r ../godot-spout-${{ github.ref_name }}.zip .
 

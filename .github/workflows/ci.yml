@@ -55,7 +55,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: build
-          key: ci-build-scoop-vulkan-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.config }}-${{ steps.godot-cpp-hash.outputs.hash }}-${{ hashFiles('CMakeLists.txt', 'src/**', 'lib/SpoutVulkan/**', 'lib/Spout2/**/CMakeLists.txt') }}
+          key: ci-build-scoop-vulkan-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.config }}-${{ steps.godot-cpp-hash.outputs.hash }}-${{ hashFiles('CMakeLists.txt', 'src/**', 'lib/Spout2/**/CMakeLists.txt') }}
           restore-keys: |
             ci-build-scoop-vulkan-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.config }}-${{ steps.godot-cpp-hash.outputs.hash }}-
             ci-build-scoop-vulkan-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.config }}-
