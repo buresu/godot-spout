@@ -25,6 +25,7 @@ else()
 endif()
 
 # godot-cpp
+set(GODOTCPP_DEFAULT_API_VERSION "4.6")
 add_subdirectory("${PROJECT_SOURCE_DIR}/lib/godot-cpp")
 
 # Spout2
@@ -59,8 +60,6 @@ target_include_directories(GodotSpout PRIVATE
     ${PROJECT_SOURCE_DIR}/lib/godot-cpp/gen/include
     ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX
     ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX/SpoutDX12
-    # Spout protocol helpers (spoutSenderNames, spoutFrameCount, SpoutUtils),
-    # compiled into SpoutDX_static and used by all backends.
     ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutGL
 )
 if(ARCH STREQUAL "arm64")
