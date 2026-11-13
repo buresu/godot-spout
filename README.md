@@ -1,7 +1,6 @@
 # godot-spout
 Godot Spout Addon via GDExtension  
 Forward+ D3D12 and Vulkan are supported for input/output.  
-Compatibility/OpenGL3 is optionally supported for output only.  
 Requires Godot 4.6 or later.
 
 ## Build
@@ -64,8 +63,8 @@ Demo scenes are in `demo/scenes`, automated tests in `demo/tests`.
 ## License
 MIT License
 
-## Known issues
-- OpenGL3 input is not supported yet.
-- Spout textures can only be shared between applications on the same GPU.
-- A transparent viewport stores premultiplied colour; use
-  `alpha_mode = ALPHA_OPAQUE` if the receiver expects straight alpha.
+## Limitations
+- Compatibility/OpenGL3 is optionally supported for output only.
+- Sender and receiver must be on the same GPU.
+- Transparent viewports send premultiplied alpha; use
+  `alpha_mode = ALPHA_OPAQUE` for receivers expecting straight alpha.
