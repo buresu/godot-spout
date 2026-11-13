@@ -8,28 +8,13 @@ Requires Godot 4.6 or later.
 git clone --recursive https://github.com/buresu/godot-spout.git
 cd godot-spout
 mkdir build && cd build
-cmake -G "Visual Studio 18 2026" ..
+cmake -G "Visual Studio 18 2026" .. [options]
 cmake --build . --config [Debug|Release] --target install
 ```
 
-## Build with Vulkan
-```
-scoop install vulkan
-git clone --recursive https://github.com/buresu/godot-spout.git
-cd godot-spout
-mkdir build && cd build
-cmake -G "Visual Studio 18 2026" .. -DGODOT_SPOUT_ENABLE_VULKAN=ON
-cmake --build . --config [Debug|Release] --target install
-```
-
-## Build with OpenGL
-```
-git clone --recursive https://github.com/buresu/godot-spout.git
-cd godot-spout
-mkdir build && cd build
-cmake -G "Visual Studio 18 2026" .. -DGODOT_SPOUT_ENABLE_OPENGL=ON
-cmake --build . --config [Debug|Release] --target install
-```
+Options:
+- `-DGODOT_SPOUT_ENABLE_VULKAN=ON`: Vulkan support (requires `scoop install vulkan`)
+- `-DGODOT_SPOUT_ENABLE_OPENGL=ON`: OpenGL support
 
 ## Usage
 ```gdscript
