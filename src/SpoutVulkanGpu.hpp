@@ -31,13 +31,23 @@ public:
   uint32_t get_width() const override { return _width; }
   uint32_t get_height() const override { return _height; }
   bool publish(SpoutGodotAccess p_access, SpoutShareSender &p_share) override;
+  bool poll(SpoutShareSender &p_share) override;
   void release() override;
   String get_adapter_name() const override;
 
 private:
+  bool copying() const { return _spout != nullptr; }
+  void update();
+  void next_write_slot();
+  bool deliver(SpoutShareSender &p_share);
+
   RenderingDevice *_rd = nullptr;
   std::shared_ptr<SpoutD3D11Device> _d3d11;
-  std::unique_ptr<SpoutVulkanSlot> _shared; // the Spout shared texture
+  // One slot (the Spout texture), or with NT handles a ring copied to _spout.
+  std::vector<std::unique_ptr<SpoutVulkanSlot>> _slots;
+  int _write = 0;
+  ID3D11Texture2D *_spout = nullptr;
+  uint64_t _spout_handle = 0;
   uint32_t _dxgi_format = 0;
   uint32_t _width = 0;
   uint32_t _height = 0;

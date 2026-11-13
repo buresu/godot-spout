@@ -352,8 +352,17 @@ void SpoutSenderCore::release_resources() {
 }
 
 void SpoutSenderCore::publish_pending() {
+  if (_pending_access == SPOUT_ACCESS_NONE) {
+    if (_gpu && _share.is_registered() &&
+        _published_generation == _gpu->get_generation() &&
+        _gpu->poll(_share)) {
+      _share.signal_frame();
+      _frames_sent++;
+    }
+    return;
+  }
   // Drop it if the target was re-created since.
-  if (_pending_access == SPOUT_ACCESS_NONE || !_gpu ||
+  if (!_gpu ||
       _pending_generation != _gpu->get_generation()) {
     _pending_access = SPOUT_ACCESS_NONE;
     return;

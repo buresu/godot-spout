@@ -44,11 +44,12 @@ public:
   ID3D11On12Device *on12() const { return _on12; }
   const String &adapter_name() const { return _adapter_name; }
 
-  // Legacy shared handle, as spoutDirectX creates it.
+  // Legacy shared handle, as spoutDirectX creates it. p_nt: an NT handle
+  // instead, closed by the caller.
   bool create_shared_texture(uint32_t p_width, uint32_t p_height,
                              uint32_t p_dxgi_format,
-                             ID3D11Texture2D **r_texture,
-                             uint64_t *r_handle) const;
+                             ID3D11Texture2D **r_texture, uint64_t *r_handle,
+                             bool p_nt = false) const;
 
   // Fails if the texture is on another adapter or its format is unsupported.
   // r_dxgi_format is the texture's own format (advertised ones are sometimes

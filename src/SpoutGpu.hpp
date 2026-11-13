@@ -53,6 +53,8 @@ public:
   // (e.g. a receiver held the mutex).
   virtual bool publish(SpoutGodotAccess p_access,
                        SpoutShareSender &p_share) = 0;
+  // In frames without publish(): delivers a delayed frame. True if one was.
+  virtual bool poll(SpoutShareSender &p_share) { return false; }
 
   virtual void release() = 0;
   virtual String get_adapter_name() const = 0;

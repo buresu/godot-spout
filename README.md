@@ -67,8 +67,5 @@ MIT License
 ## Known issues
 - OpenGL3 input is not supported yet.
 - Spout textures can only be shared between applications on the same GPU.
-- Vulkan: Godot doesn't enable `VK_KHR_external_memory_win32`, so importing
-  Spout textures relies on the driver accepting it (NVIDIA and AMD do; Intel
-  iGPUs don't). D3D12 is recommended.
 - A transparent viewport stores premultiplied colour; use
   `alpha_mode = ALPHA_OPAQUE` if the receiver expects straight alpha.

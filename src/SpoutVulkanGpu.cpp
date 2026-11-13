@@ -21,9 +21,11 @@
 
 using namespace godot;
 
-// Slots: D3D11 shared textures on Godot's GPU imported into Vulkan.
+// Slots: D3D11 shared textures on Godot's GPU imported into Vulkan (KMT
+// handles, or NT handles if the driver only imports those, e.g. Intel).
 // Sender: Godot writes the Spout shared texture in its own queue (a D3D11 copy
-// lands later and makes D3D12 receivers repeat frames).
+// lands later and makes D3D12 receivers repeat frames). With NT handles, D3D11
+// copies each slot to the Spout texture once Godot's frame is done.
 // Receiver: D3D11 copies the sender's texture into a slot right after the
 // previous frame (prefetch); Godot reads it once the copy's query is done.
 // Godot doesn't enable VK_KHR_external_memory_win32; drivers don't enforce it.
@@ -56,9 +58,6 @@ VkFormat rd_to_vk(RenderingDevice::DataFormat p) {
     return VK_FORMAT_UNDEFINED;
   }
 }
-
-constexpr VkExternalMemoryHandleTypeFlagBits HANDLE_TYPE =
-    VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_KMT_BIT;
 
 struct VkContext {
   VkPhysicalDevice physical = VK_NULL_HANDLE;
@@ -115,10 +114,12 @@ std::shared_ptr<SpoutD3D11Device> get_d3d11(RenderingDevice *p_rd) {
 
 // r_dedicated: the import needs a dedicated allocation.
 bool import_supported(VkPhysicalDevice p_physical, VkFormat p_format,
-                      VkImageUsageFlags p_usage, bool &r_dedicated) {
+                      VkImageUsageFlags p_usage,
+                      VkExternalMemoryHandleTypeFlagBits p_type,
+                      bool &r_dedicated) {
   VkPhysicalDeviceExternalImageFormatInfo external = {};
   external.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO;
-  external.handleType = HANDLE_TYPE;
+  external.handleType = p_type;
   VkPhysicalDeviceImageFormatInfo2 info = {};
   info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2;
   info.pNext = &external;
@@ -142,19 +143,42 @@ bool import_supported(VkPhysicalDevice p_physical, VkFormat p_format,
   return (features & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT) != 0;
 }
 
+// KMT first: only those can be the Spout texture. STORAGE is optional.
+bool choose_import(VkPhysicalDevice p_physical, VkFormat p_format,
+                   VkExternalMemoryHandleTypeFlagBits &r_type,
+                   VkImageUsageFlags &r_usage, bool &r_dedicated) {
+  const VkImageUsageFlags base = VK_IMAGE_USAGE_SAMPLED_BIT |
+                                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                 VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  for (VkExternalMemoryHandleTypeFlagBits type :
+       {VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_KMT_BIT,
+        VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT}) {
+    for (VkImageUsageFlags usage : {base | VK_IMAGE_USAGE_STORAGE_BIT, base}) {
+      if (import_supported(p_physical, p_format, usage, type, r_dedicated)) {
+        r_type = type;
+        r_usage = usage;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 } // namespace
 
 // A texture shared between our D3D11 device and Godot (Vulkan).
 struct godot::SpoutVulkanSlot {
   enum State {
     FREE,
-    GODOT, // Godot reads it in `frame`
-    D3D11, // D3D11 copy into it in flight (`query`)
-    READY, // D3D11 copy done, not read yet
+    GODOT, // Godot uses it in `frame`
+    D3D11, // D3D11 copy in flight (`query`)
+    READY, // ready for the next step
   };
 
   ID3D11Texture2D *texture = nullptr; // owns the memory
-  uint64_t handle = 0;                // legacy shared handle of `texture`
+  uint64_t handle = 0;                // legacy shared handle, 0 if `nt`
+  bool nt = false;
+  bool written = false; // sender: published
   ID3D11Query *query = nullptr;
   VkDevice device = VK_NULL_HANDLE;
   VkImage image = VK_NULL_HANDLE;
@@ -234,30 +258,38 @@ std::unique_ptr<Slot> create_slot(RenderingDevice *p_rd,
     r_error = "unsupported format";
     return nullptr;
   }
-  // STORAGE is optional (compute pass only).
-  const VkImageUsageFlags base = VK_IMAGE_USAGE_SAMPLED_BIT |
-                                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                                 VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-  VkImageUsageFlags usage = base | VK_IMAGE_USAGE_STORAGE_BIT;
+  VkExternalMemoryHandleTypeFlagBits handle_type =
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_KMT_BIT;
+  VkImageUsageFlags usage = 0;
   bool dedicated = false;
-  if (!import_supported(vk.physical, format, usage, dedicated)) {
-    usage = base;
-    if (!import_supported(vk.physical, format, usage, dedicated)) {
-      r_error = "this GPU/driver can't import D3D11 shared textures into "
-                "Vulkan for this format";
-      return nullptr;
-    }
+  if (!choose_import(vk.physical, format, handle_type, usage, dedicated)) {
+    r_error = "this GPU/driver can't import D3D11 shared textures into "
+              "Vulkan for this format";
+    return nullptr;
   }
 
   auto slot = std::make_unique<Slot>();
   slot->device = vk.device;
   slot->storage = (usage & VK_IMAGE_USAGE_STORAGE_BIT) != 0;
+  slot->nt = handle_type == VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT;
 
-  uint64_t &handle = slot->handle;
+  uint64_t handle = 0;
   if (!p_d3d11.create_shared_texture(p_width, p_height, p_dxgi_format,
-                                     &slot->texture, &handle)) {
+                                     &slot->texture, &handle, slot->nt)) {
     r_error = "could not create a D3D11 texture";
     return nullptr;
+  }
+  // Not owned by Vulkan after import.
+  struct NtHandleCloser {
+    HANDLE handle;
+    ~NtHandleCloser() {
+      if (handle) {
+        CloseHandle(handle);
+      }
+    }
+  } nt_closer{slot->nt ? reinterpret_cast<HANDLE>(handle) : nullptr};
+  if (!slot->nt) {
+    slot->handle = handle;
   }
   D3D11_QUERY_DESC query_desc = {D3D11_QUERY_EVENT, 0};
   if (FAILED(p_d3d11.device()->CreateQuery(&query_desc, &slot->query))) {
@@ -268,7 +300,7 @@ std::unique_ptr<Slot> create_slot(RenderingDevice *p_rd,
 
   VkExternalMemoryImageCreateInfo external = {};
   external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
-  external.handleTypes = HANDLE_TYPE;
+  external.handleTypes = handle_type;
   VkImageCreateInfo image_info = {};
   image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
   image_info.pNext = &external;
@@ -311,7 +343,7 @@ std::unique_ptr<Slot> create_slot(RenderingDevice *p_rd,
   if (get_handle_props) {
     VkMemoryWin32HandlePropertiesKHR handle_props = {};
     handle_props.sType = VK_STRUCTURE_TYPE_MEMORY_WIN32_HANDLE_PROPERTIES_KHR;
-    if (get_handle_props(vk.device, HANDLE_TYPE,
+    if (get_handle_props(vk.device, handle_type,
                          reinterpret_cast<HANDLE>(handle),
                          &handle_props) == VK_SUCCESS &&
         (handle_props.memoryTypeBits & type_bits)) {
@@ -339,7 +371,7 @@ std::unique_ptr<Slot> create_slot(RenderingDevice *p_rd,
 
   VkImportMemoryWin32HandleInfoKHR import_info = {};
   import_info.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR;
-  import_info.handleType = HANDLE_TYPE;
+  import_info.handleType = handle_type;
   import_info.handle = reinterpret_cast<HANDLE>(handle);
   VkMemoryDedicatedAllocateInfo dedicated_info = {};
   dedicated_info.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
@@ -409,15 +441,18 @@ SpoutVulkanSender::SpoutVulkanSender(RenderingDevice *p_rd)
 SpoutVulkanSender::~SpoutVulkanSender() { release(); }
 
 RID SpoutVulkanSender::get_target() const {
-  return _shared ? _shared->rid : RID();
+  return _slots.empty() ? RID() : _slots[_write]->rid;
 }
 
 uint64_t SpoutVulkanSender::get_share_handle() const {
-  return _shared ? _shared->handle : 0;
+  if (copying()) {
+    return _spout_handle;
+  }
+  return _slots.empty() ? 0 : _slots[0]->handle;
 }
 
 bool SpoutVulkanSender::target_supports_storage() const {
-  return _shared && _shared->storage;
+  return !_slots.empty() && _slots[_write]->storage;
 }
 
 String SpoutVulkanSender::get_adapter_name() const {
@@ -429,19 +464,54 @@ bool SpoutVulkanSender::ensure(uint32_t p_width, uint32_t p_height,
   if (!_usable) {
     return false;
   }
-  if (_shared && p_width == _width && p_height == _height &&
+  if (!_slots.empty() && p_width == _width && p_height == _height &&
       p_format == _format) {
+    if (copying()) {
+      next_write_slot();
+    }
     return true;
   }
   release();
 
   _dxgi_format = spout_send_format_to_dxgi(p_format);
   String error;
-  _shared = create_slot(_rd, *_d3d11, p_width, p_height, _dxgi_format, error);
-  if (!_shared) {
+  std::unique_ptr<Slot> first =
+      create_slot(_rd, *_d3d11, p_width, p_height, _dxgi_format, error);
+  const bool nt = first && first->nt;
+  if (first) {
+    _slots.push_back(std::move(first));
+  }
+  if (nt) {
+    // Written, in flight, copied, spare.
+    const uint32_t count = _rd->get_frame_delay() + 3;
+    while (_slots.size() < count) {
+      std::unique_ptr<Slot> slot =
+          create_slot(_rd, *_d3d11, p_width, p_height, _dxgi_format, error);
+      if (!slot) {
+        break;
+      }
+      _slots.push_back(std::move(slot));
+    }
+    if (_slots.size() < count ||
+        !_d3d11->create_shared_texture(p_width, p_height, _dxgi_format,
+                                       &_spout, &_spout_handle)) {
+      if (error.is_empty()) {
+        error = "could not create the Spout texture";
+      }
+      destroy_slots(_rd, _slots);
+    }
+  }
+  if (_slots.empty()) {
     spout_error("Vulkan sender: " + error + ".");
     _usable = false; // don't retry (and fail) every frame
     return false;
+  }
+  if (nt) {
+    spout_log("Vulkan sender: the driver can't import legacy shared handles; "
+              "copying finished frames (+" +
+              String::num_int64(_rd->get_frame_delay()) +
+              " frames of latency).");
+    next_write_slot();
   }
   _width = p_width;
   _height = p_height;
@@ -450,14 +520,98 @@ bool SpoutVulkanSender::ensure(uint32_t p_width, uint32_t p_height,
   return true;
 }
 
+void SpoutVulkanSender::update() {
+  for (auto &slot : _slots) {
+    if (slot->state == Slot::GODOT &&
+        spout_render_frame_done(_rd, slot->frame)) {
+      slot->state = slot->written ? Slot::READY : Slot::FREE;
+    }
+    if (slot->state == Slot::D3D11 && query_done(*_d3d11, slot->query)) {
+      slot->state = Slot::FREE;
+    }
+  }
+}
+
+void SpoutVulkanSender::next_write_slot() {
+  update();
+  // Oldest free, else oldest uncopied, else oldest in flight. Never one being
+  // copied.
+  int pick = -1;
+  for (Slot::State state : {Slot::FREE, Slot::READY, Slot::GODOT}) {
+    for (int i = 0; i < int(_slots.size()); i++) {
+      if (_slots[i]->state == state &&
+          (pick < 0 || _slots[i]->frame < _slots[pick]->frame)) {
+        pick = i;
+      }
+    }
+    if (pick >= 0) {
+      break;
+    }
+  }
+  if (pick < 0) {
+    pick = _write;
+  }
+  _write = pick;
+  Slot &slot = *_slots[_write];
+  slot.state = Slot::GODOT;
+  slot.frame = spout_render_frame();
+  slot.written = false;
+}
+
+bool SpoutVulkanSender::deliver(SpoutShareSender &p_share) {
+  update();
+  int newest = -1;
+  for (int i = 0; i < int(_slots.size()); i++) {
+    Slot &slot = *_slots[i];
+    if (slot.state != Slot::READY) {
+      continue;
+    }
+    if (newest < 0 || slot.frame > _slots[newest]->frame) {
+      if (newest >= 0) {
+        _slots[newest]->state = Slot::FREE;
+      }
+      newest = i;
+    } else {
+      slot.state = Slot::FREE;
+    }
+  }
+  if (newest < 0 || !p_share.lock()) {
+    return false;
+  }
+  Slot &slot = *_slots[newest];
+  d3d11_copy(*_d3d11, _spout, slot.texture, slot.query);
+  p_share.unlock();
+  slot.state = Slot::D3D11;
+  return true;
+}
+
 bool SpoutVulkanSender::publish(SpoutGodotAccess p_access,
                                 SpoutShareSender &p_share) {
-  // Godot wrote the shared texture in the frame it just submitted.
-  return _shared != nullptr && p_access != SPOUT_ACCESS_NONE;
+  if (_slots.empty() || p_access == SPOUT_ACCESS_NONE) {
+    return false;
+  }
+  if (!copying()) {
+    // Godot wrote the shared texture in the frame it just submitted.
+    return true;
+  }
+  _slots[_write]->written = true;
+  return deliver(p_share);
+}
+
+bool SpoutVulkanSender::poll(SpoutShareSender &p_share) {
+  return copying() && !_slots.empty() && deliver(p_share);
 }
 
 void SpoutVulkanSender::release() {
-  destroy_slot(_rd, _shared);
+  destroy_slots(_rd, _slots);
+  if (_spout) {
+    // D3D11 may still be copying into it.
+    ID3D11Texture2D *spout = _spout;
+    spout_defer_release([spout]() { spout->Release(); });
+    _spout = nullptr;
+  }
+  _spout_handle = 0;
+  _write = 0;
   _width = _height = 0;
 }
 

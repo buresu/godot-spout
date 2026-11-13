@@ -201,7 +201,8 @@ bool SpoutD3D11Device::create_shared_texture(uint32_t p_width,
                                              uint32_t p_height,
                                              uint32_t p_dxgi_format,
                                              ID3D11Texture2D **r_texture,
-                                             uint64_t *r_handle) const {
+                                             uint64_t *r_handle,
+                                             bool p_nt) const {
   D3D11_TEXTURE2D_DESC desc = {};
   desc.Width = p_width;
   desc.Height = p_height;
@@ -214,6 +215,9 @@ bool SpoutD3D11Device::create_shared_texture(uint32_t p_width,
   // What DX9/DX11 receivers expect.
   desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
   desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
+  if (p_nt) {
+    desc.MiscFlags |= D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+  }
 
   ID3D11Texture2D *texture = nullptr;
   const HRESULT hr = _device->CreateTexture2D(&desc, nullptr, &texture);
@@ -224,11 +228,23 @@ bool SpoutD3D11Device::create_shared_texture(uint32_t p_width,
                 hresult(hr) + ").");
     return false;
   }
-  IDXGIResource *resource = nullptr;
   HANDLE handle = nullptr;
-  if (SUCCEEDED(texture->QueryInterface(IID_PPV_ARGS(&resource)))) {
-    resource->GetSharedHandle(&handle);
-    resource->Release();
+  if (p_nt) {
+    IDXGIResource1 *resource = nullptr;
+    if (SUCCEEDED(texture->QueryInterface(IID_PPV_ARGS(&resource)))) {
+      if (FAILED(resource->CreateSharedHandle(
+              nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
+              nullptr, &handle))) {
+        handle = nullptr;
+      }
+      resource->Release();
+    }
+  } else {
+    IDXGIResource *resource = nullptr;
+    if (SUCCEEDED(texture->QueryInterface(IID_PPV_ARGS(&resource)))) {
+      resource->GetSharedHandle(&handle);
+      resource->Release();
+    }
   }
   if (!handle) {
     spout_error("Shared texture has no share handle.");
