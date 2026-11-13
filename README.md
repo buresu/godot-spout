@@ -1,7 +1,7 @@
 # godot-spout
-Godot Spout Addon via GDExtension  
-Forward+ D3D12 and Vulkan are supported for input/output.  
-Requires Godot 4.6 or later.
+Spout texture sharing for Godot via GDExtension.  
+Sends and receives on D3D12 and Vulkan (Forward+ / Mobile).  
+Requires Windows and Godot 4.6 or later.
 
 ## Build
 ```
