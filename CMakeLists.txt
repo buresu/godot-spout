@@ -55,9 +55,6 @@ target_include_directories(GodotSpout PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${PROJECT_SOURCE_DIR}/lib/godot-cpp/gdextension
-    ${PROJECT_SOURCE_DIR}/lib/godot-cpp/include
-    ${PROJECT_SOURCE_DIR}/lib/godot-cpp/gen/include
     ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX
     ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutDirectX/SpoutDX/SpoutDX12
     ${PROJECT_SOURCE_DIR}/lib/Spout2/SPOUTSDK/SpoutGL
