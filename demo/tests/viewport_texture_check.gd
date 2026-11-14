@@ -21,7 +21,7 @@ func _process(_delta: float) -> bool:
 		return false
 	var preloaded: Texture2D = load("res://textures/viewport_texture.tres")
 	var in_scene: Texture2D = scene.get_node("SpoutOutput").get("texture")
-	var vp_tex: Texture2D = scene.get_node("SubViewportContainer/SubViewport").get_texture()
+	var vp_tex: Texture2D = scene.get_node("SubViewport").get_texture()
 	# Regression check for the demo fix: press "Icon", then "Viewport Texture",
 	# and look at what the sender ends up with.
 	scene.get_node("ButtonBar/ButtonIcon").pressed.emit()
